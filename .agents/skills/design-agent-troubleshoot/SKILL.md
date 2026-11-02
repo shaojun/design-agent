@@ -15,6 +15,7 @@ Report missing settings by name and never paste a key, token or `.env` line.
 
 | Symptom | Fix |
 | --- | --- |
+| Feishu connects but private messages get no reply | verify `im:message.p2p_msg:readonly` is granted in the published app, then inspect ingress logs; a group-mention grant does not enable DMs ([Feishu](../../../docs/feishu.md)) |
 | `demo` needs a sandbox | start Docker, then `uv run design-agent sandbox build` |
 | A render is missing a font | `uv run design-agent fonts verify`; `family` in `fonts.toml` must be the name inside the file |
 | Off-brand colours or a failed brand check | `uv run design-agent brand validate`, then `brand css` |

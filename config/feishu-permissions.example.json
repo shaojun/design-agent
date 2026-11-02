@@ -1,0 +1,14 @@
+{
+  "scopes": {
+    "tenant": [
+      "im:message.p2p_msg:readonly",
+      "im:message.group_at_msg:readonly",
+      "im:message:send_as_bot",
+      "im:message:readonly",
+      "im:resource",
+      "im:message:update",
+      "im:message.reactions:write_only"
+    ],
+    "user": []
+  }
+}

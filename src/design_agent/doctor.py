@@ -34,6 +34,9 @@ PROVIDER_KEYS = {
 #: Keys a self-hosted install reads. `mda deploy` forwards every `.env` key but LangSmith's as a
 #: deployment secret, so these must not sit in the `.env` an MDA deploy runs from.
 SELF_HOSTED_KEYS = (
+    "FEISHU_APP_ID",
+    "FEISHU_APP_SECRET",
+    "FEISHU_TENANT_KEY",
     "SLACK_BOT_TOKEN",
     "SLACK_APP_TOKEN",
     "SLACK_SIGNING_SECRET",

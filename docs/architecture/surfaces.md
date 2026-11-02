@@ -50,6 +50,30 @@ start one, attachments are fetched on the host with the bot token, finals upload
 and wake-up replies post there. The same middleware draws progress and the footer. Manifest:
 `config/slack-manifest.example.yaml`.
 
+## Self-hosted Feishu
+
+`design-agent feishu` uses the official `lark-oapi` long connection on the main thread and runs
+the shared local runtime on a separate asyncio loop. SDK callbacks enqueue events and return
+immediately; they do not wait for models, attachment downloads or renders. App and tenant must
+match the configured installation, and only people can trigger a run. Direct messages share one
+conversation until `/new` selects a fresh persisted session and sandbox; old work remains intact.
+Group topics have separate thread ids. A group topic starts with an exact bot
+mention; subsequent messages are handled only in a known topic, when platform permissions deliver
+them. Turns and attachment staging serialize per conversation. The store retains the latest 256
+message ids per conversation for replay deduplication.
+
+Resources are downloaded from fixed Feishu API paths on the host with a size cap, never from a
+URL in user content. `FeishuFileDelivery` sends `upload_files` outputs back to the same chat or
+topic, with a 30 MiB per-file limit also exposed in the tool schema description. Host progress
+middleware retains each lead tool call in default-collapsed JSON 2.0 cards, with actual result
+status and elapsed time. Updates coalesce at three seconds without dropping steps; groups of 25
+steps share a card until its reserved size budget requires a continuation. Disabling progress
+suppresses these cards. Card failures disable progress for that turn
+without stopping execution or final delivery. Whole-card refreshes may reset a person's expanded
+panel. Background helper internals are not included; wake-up replies use the adapter's reply callback.
+Follow-ups queue rather than steering a busy run. This is a self-hosted transport; MDA's channel
+declarations are unchanged. Setup and recovery limits: [飞书接入](../feishu.md).
+
 ## The API and the CLI
 
 The API returns each turn's reply and delivered files, and background news through

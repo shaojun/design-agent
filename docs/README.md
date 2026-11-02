@@ -22,6 +22,7 @@ which one fits.
 | --- | --- |
 | [Deploy with MDA](deploy-mda.md) | publishing the sandbox, what ships, deploying, verifying |
 | [Self-hosting](self-hosting.md) | Docker Compose, the HTTP API, your own Slack app, security |
+| [飞书接入](feishu.md) | 企业自建应用、长连接、权限、消息与附件收发 |
 | [Paper hosted worker](partners/paper-hosted-worker.md) | Paper Desktop on a server for a deployed agent |
 | [Operations](../OPERATIONS.md) | configuration, the sandbox, costs, troubleshooting, upgrades, backups |
 

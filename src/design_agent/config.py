@@ -204,6 +204,13 @@ class Settings(BaseSettings):
     slack_allow_bot_triggers: bool = False
 
     # Self-hosted
+    feishu_app_id: str | None = Field(default=None, validation_alias=_alias("FEISHU_APP_ID"))
+    feishu_app_secret: SecretStr | None = Field(
+        default=None, validation_alias=_alias("FEISHU_APP_SECRET")
+    )
+    feishu_tenant_key: str | None = Field(
+        default=None, validation_alias=_alias("FEISHU_TENANT_KEY")
+    )
     slack_bot_token: SecretStr | None = Field(
         default=None, validation_alias=_alias("SLACK_BOT_TOKEN")
     )
@@ -254,6 +261,9 @@ class Settings(BaseSettings):
         "exa_api_key",
         "paper_bridge_token",
         "slack_bot_token",
+        "feishu_app_id",
+        "feishu_app_secret",
+        "feishu_tenant_key",
         "slack_app_token",
         "slack_signing_secret",
         "database_url",

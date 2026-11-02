@@ -55,6 +55,8 @@ class RuntimeProfile:
     """A `surfaces.slack.SlackSurface` when runs answer in Slack: live progress, footer, steering."""
     surface: str = "cli"
     """How runs reach the agent when no channel says so (trace tags): `cli`, `api`, `studio`."""
+    surface_middleware: tuple[Any, ...] = ()
+    """Host presentation hooks supplied by a self-hosted transport, for the lead only."""
 
 
 def mda_profile(project_root: Path, settings: Settings | None = None) -> RuntimeProfile:

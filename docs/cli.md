@@ -15,9 +15,10 @@
 | `manifest` | what the workspace stager puts in each sandbox |
 | `serve` | the self-hosted HTTP API ([self-hosting](self-hosting.md)) |
 | `slack` | the self-hosted Slack app |
+| `feishu` | the self-hosted Feishu enterprise bot, using a long connection ([setup](feishu.md)) |
 | `paper-bridge` | serve this machine's Paper Desktop to a remote agent behind a bearer token ([Paper](partners/paper.md)) |
 | `eval list\|run` | the eval set ([evals](evals.md)); `run` spends money and asks first |
-| `test model\|sandbox\|paper\|slack\|db` | real connectivity checks; `model` costs a cent or so |
+| `test model\|sandbox\|paper\|slack\|feishu\|db` | real connectivity checks; `model` costs a cent or so |
 
 There is no web setup console in v0.1: `config`, `doctor` and the coding-agent
 [onboarding skill](../.agents/skills/design-agent-onboarding/SKILL.md) cover setup.

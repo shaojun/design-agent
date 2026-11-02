@@ -82,6 +82,31 @@ services:
       sandbox:
         condition: service_completed_successfully
 
+  feishu:
+    profiles: ["feishu"]
+    build:
+      context: ../..
+      dockerfile: deploy/self-host/Dockerfile
+    command: ["design-agent", "feishu"]
+    env_file:
+      - path: ../../.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://design_agent:${POSTGRES_PASSWORD}@postgres:5432/design_agent
+      DESIGN_AGENT_SANDBOX: docker
+      DESIGN_AGENT_BRAND_PATH: /app/workspace/brand
+    group_add: ["${DOCKER_GID:-0}"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../workspace/brand:/app/workspace/brand:ro
+      - ../../private-fonts:/app/private-fonts:ro
+      - out:/app/workspace/out
+    depends_on:
+      postgres:
+        condition: service_healthy
+      sandbox:
+        condition: service_completed_successfully
+
 volumes:
   postgres:
   out:

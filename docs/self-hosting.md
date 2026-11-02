@@ -53,6 +53,11 @@ docker compose -f deploy/self-host/compose.yaml --profile slack up -d --build
 The Slack service shares Postgres and the sandbox with the API. Files people attach reach the
 thread's sandbox under `/workspace/attachments/`; finals are uploaded to the thread.
 
+## Feishu
+
+For a Feishu enterprise bot, see [飞书接入](feishu.md). Run `design-agent feishu` locally or
+enable Compose's `--profile feishu`; it shares the agent, persistence and sandbox implementation.
+
 ## Durability and restarts
 
 - Conversations, the helper ledger, transcripts, check-ins, watches, pipeline memos, observations

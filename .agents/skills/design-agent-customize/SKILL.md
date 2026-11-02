@@ -16,9 +16,15 @@ asset after it follows:
 | Identity, delivery and approval rules, how it talks | `instructions.md` (a budget test fails past about 8k tokens) |
 | A rule a machine can count | a check in `workspace/tools/` |
 | A tool or data source | an MCP server in `config/mcp.toml` |
+| A self-hosted chat client | `src/design_agent/surfaces/`; reuse the shared runtime and delivery adapter, as in [Feishu](../../../docs/feishu.md) |
 | Which model plays which role, effort, budgets | `.env` settings; [Models](../../../docs/models.md) |
 
 ## Add a runtime skill
+
+Feishu progress presentation lives in `surfaces/feishu/progress.py`: keep every lead tool call,
+default-collapse the history, mark outcomes from tool results, and isolate card failures from
+execution and delivery. Verify with `tests/unit/test_feishu_progress.py` and the Feishu contract
+test before restarting an idle client. Whole-card updates can reset the local expanded state.
 
 Start with the graphic the team asks for every week.
 

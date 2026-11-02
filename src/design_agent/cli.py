@@ -395,6 +395,14 @@ def slack_command() -> None:
     asyncio.run(serve_slack(_root(), Settings()))
 
 
+@main.command("feishu")
+def feishu_command() -> None:
+    """Run the self-hosted Feishu bot over the official SDK's long connection."""
+    from design_agent.surfaces.feishu.app import serve
+
+    serve(_root(), Settings())
+
+
 @main.group()
 def sandbox() -> None:
     """Build, test and publish the designer's computer."""
@@ -710,6 +718,24 @@ def test_slack() -> None:
     except SlackError as error:
         click.echo(f"slack: {error.code}", err=True)
         sys.exit(1)
+
+
+@connectivity.command("feishu")
+def test_feishu() -> None:
+    """Check Feishu app credentials and bot capability without sending a message."""
+    from design_agent.surfaces.feishu.client import FeishuClient, FeishuError
+
+    settings = Settings()
+    if not settings.feishu_app_id or settings.feishu_app_secret is None:
+        raise click.ClickException("FEISHU_APP_ID and FEISHU_APP_SECRET must be set")
+    client = FeishuClient(settings.feishu_app_id, settings.feishu_app_secret.get_secret_value())
+    try:
+        client.identity()
+        click.echo("feishu: ok (credentials and bot capability; message permissions not tested)")
+    except FeishuError as error:
+        raise click.ClickException(f"feishu: {error}") from None
+    finally:
+        client.close()
 
 
 @connectivity.command("db")

@@ -45,11 +45,13 @@ def local_profile(
     slack: Any = None,
     surface: str = "cli",
     delivery: DeliveryAdapter | None = None,
+    surface_middleware: tuple[Any, ...] = (),
 ) -> RuntimeProfile:
     return RuntimeProfile(
         name="local",
         slack=slack,
         surface=surface,
+        surface_middleware=surface_middleware,
         project_root=project_root,
         backend_for=binding.backend_for,
         staging_for=binding.staging_for,
@@ -203,6 +205,7 @@ def build_local_runtime(
     slack: Any = None,
     surface: str = "cli",
     delivery: DeliveryAdapter | None = None,
+    surface_middleware: tuple[Any, ...] = (),
 ) -> LocalRuntime:
     """Select the sandbox, assemble the components, compile the graph and wire the waker.
 
@@ -223,7 +226,14 @@ def build_local_runtime(
     waker = InProcessWaker(run_turn, store=store)
     services = BackgroundServices(waker=waker, capture_target=waker.capture)
     profile = local_profile(
-        project_root, chosen, out, services, slack=slack, surface=surface, delivery=delivery
+        project_root,
+        chosen,
+        out,
+        services,
+        slack=slack,
+        surface=surface,
+        delivery=delivery,
+        surface_middleware=surface_middleware,
     )
     components = build_agent_components(
         settings=settings,

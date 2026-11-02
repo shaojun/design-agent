@@ -1075,6 +1075,12 @@ pull request (not in the repository).
 7. **Self-hosted.** FastAPI, Postgres repositories (checkpoints, helper records, transcripts, wake-ups,
    watches, observations), Bolt Slack adapter with streaming and file upload, Docker compose with the
    sandbox runner. Acceptance: compose up from a clean machine; the same Slack scenarios as Slice 5.
+   Feishu enterprise bots use the same assembly through an optional long-connection adapter:
+   private-message continuity, group-topic isolation, host-side attachment staging, file delivery,
+   per-turn collapsed progress cards retaining tool outcomes and duration, and background replies.
+   Follow-ups queue; Slack streaming, footer and
+   mid-turn steering are not part of this adapter. Acceptance: offline graph contracts and a live
+   private/group attachment round trip in the operator's enterprise; see [Feishu](feishu.md).
 8. **Onboarding and console.** `.agents/skills/` (onboarding, brand-onboarding, vendor-sync,
    release-check), optional setup console (Welcome → Model → Media → Brand → Paper → Deploy) over the
    same CLI actions. Acceptance: a new developer configures and deploys using only the README and a

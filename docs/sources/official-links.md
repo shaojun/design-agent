@@ -113,6 +113,20 @@ Confirm each URL still resolves when you move a pin forward; the docs site renam
 - Bolt for Python: <https://docs.slack.dev/tools/bolt-python/>
 - Socket Mode: <https://docs.slack.dev/apis/events-api/using-socket-mode>
 
+## Feishu (self-hosted enterprise bots)
+
+- Long connection: <https://open.feishu.cn/document/ukTMukTMukTM/uYDNxYjL2QTM24iN0EjN/event-subscription-configure->
+- Python SDK: <https://github.com/larksuite/oapi-sdk-python>
+- Message events: <https://open.feishu.cn/document/server-docs/im-v1/message/events/receive>
+- Reply: <https://open.feishu.cn/document/server-docs/im-v1/message/reply>
+- Message content and Markdown `md` tag: <https://open.feishu.cn/document/server-docs/im-v1/message-content-description/create_json?lang=zh-CN>
+- Resource download: <https://open.feishu.cn/document/server-docs/im-v1/message/get-2>
+- File upload: <https://open.feishu.cn/document/server-docs/im-v1/file/create>
+- Collapsible panels: <https://open.feishu.cn/document/feishu-cards/card-json-v2-components/containers/collapsible-panel>
+- Card updates: <https://open.feishu.cn/document/server-docs/im-v1/message-card/patch>
+- Message reactions: <https://open.feishu.cn/document/server-docs/im-v1/message-reaction/create>
+- Reaction emoji types: <https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce>
+
 ## Skills format
 
 - Agent Skills specification: <https://agentskills.io/specification>

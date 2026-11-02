@@ -61,6 +61,7 @@ self-host = [
     "uvicorn[standard]>=0.35,<1",
 ]
 slack = ["slack-bolt>=1.30,<2", "slack-sdk>=3.45,<4", "aiohttp>=3.9,<4"]
+feishu = ["lark-oapi>=1.7.5,<2"]
 # Extra model providers. Each adds a `provider:` prefix for DESIGN_AGENT_MODEL.
 google = ["langchain-google-genai>=4,<5"]
 groq = ["langchain-groq>=1,<2"]

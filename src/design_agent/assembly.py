@@ -217,6 +217,7 @@ def build_agent_components(
         ),
     ]
     slack = runtime.slack
+    middleware.extend(runtime.surface_middleware)
     servers = services([s.name for s in mcp_servers])
     if slack is not None:
         # Steering reads follow-ups before progress draws the turn; both sit outside the model
