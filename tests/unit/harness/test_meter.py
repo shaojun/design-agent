@@ -232,7 +232,9 @@ def test_every_listed_price_names_its_date_and_public_source() -> None:
         PRICES
     )
     for model, price in PRICES.items():
-        assert price.provider in ("anthropic", "openai"), model
+        assert price.provider in ("anthropic", "openai", "openrouter", "deepseek", "dashscope"), (
+            model
+        )
         assert price.source.startswith("https://") and price.date, model
         assert price.write_1h >= price.write_5m >= price.input > price.read, model
 
@@ -325,3 +327,39 @@ def test_a_malformed_price_file_says_what_is_wrong(tmp_path, body: str, problem:
     path.write_text(body)
     with pytest.raises(ValueError, match=problem):
         load_prices(path)
+
+
+@pytest.mark.parametrize(
+    "model,rates",
+    [
+        ("qwen3-vl-plus", [(0.2, 1.6), (0.3, 2.4), (0.6, 4.8)]),
+        ("qwen3-vl-flash", [(0.05, 0.4), (0.075, 0.6), (0.12, 0.96)]),
+    ],
+)
+def test_qwen_prices_use_the_whole_request_tier_at_each_boundary(model, rates) -> None:
+    for tokens, tier in [(32_768, 0), (32_769, 1), (131_072, 1), (131_073, 2)]:
+        cost = cost_of(_langchain_usage(uncached=tokens, read=0, out=10), f"openai:{model}")
+        assert cost.input_usd == pytest.approx(tokens * rates[tier][0] / 1_000_000)
+        assert cost.output_usd == pytest.approx(10 * rates[tier][1] / 1_000_000)
+
+
+def test_deepseek_peak_estimate_prices_cache_hits_separately() -> None:
+    cost = cost_of(_langchain_usage(uncached=1000, read=9000, out=1000), "openai:deepseek-flash")
+    assert cost.input_usd == pytest.approx(0.0003)
+    assert cost.read_usd == pytest.approx(0.000054)
+    assert cost.output_usd == pytest.approx(0.0012)
+
+
+def test_missing_prices_remain_visible_in_thread_role_and_source_totals() -> None:
+    meter = Meter(bus=None)
+    unknown = _event("mixed", "helper", _langchain_usage(uncached=100, read=0, out=20), 0)
+    unknown.data["priced"] = False
+    meter.record(unknown)
+    meter.record(_event("mixed", "lead", _langchain_usage(uncached=50, read=0, out=10), 0.25))
+    summary = meter.summary("mixed")
+    assert summary.usd == 0.25 and summary.unpriced_calls == 1 and summary.calls == 2
+    assert summary.input_tokens == 150 and summary.output_tokens == 30
+    assert summary.by_source["helper"].unpriced_calls == 1
+    assert summary.by_role["lead"].unpriced_calls == 1
+    meter.forget("mixed")
+    assert meter.summary("mixed").unpriced_calls == 0

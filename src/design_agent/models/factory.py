@@ -54,7 +54,7 @@ def resolve_model(
     spec = settings.lead_model() if role == "lead" else settings.role_model(role)
     base_url = settings.model_base_url if spec == settings.lead_model() else None
     caps = capabilities_for(spec, base_url=base_url)
-    if caps.provider in {"deepseek", "dashscope"} and base_url is None:
+    if caps.requires_base_url and base_url is None:
         raise ModelConfigurationError(
             f"{spec} needs DESIGN_AGENT_MODEL_BASE_URL for its compatible endpoint"
         )

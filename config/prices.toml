@@ -11,7 +11,8 @@
 #   cache_write_1h  ... with a 1-hour lifetime (a provider with one write price sets both the same)
 #   cache_read      prompt tokens read from the cache
 # A `long_context` table holds the prices a request pays once its prompt (cache reads and writes
-# included) passes `above_input_tokens`. `date` and `source` may also be set on one model.
+# included) passes `above_input_tokens`; nest `long_context` for further tiers.
+# `date` and `source` may also be set on one model.
 # A dated snapshot id (`claude-opus-5-5-20261001`) and a `provider:model` id match their model here.
 
 [anthropic]
@@ -110,3 +111,91 @@ output = 30.00
 cache_write_5m = 10.00
 cache_write_1h = 10.00
 cache_read = 0.80
+
+[openrouter]
+source = "https://openrouter.ai/anthropic/claude-haiku-5.5"
+date = 2026-11-02
+
+[openrouter.models."claude-haiku-5.5"]
+input = 0.10
+output = 0.50
+cache_write_5m = 0.125
+cache_write_1h = 0.20
+cache_read = 0.01
+
+[openrouter.models."claude-haiku-5.5".long_context]
+above_input_tokens = 100_000
+input = 0.50
+output = 2.50
+cache_write_5m = 0.625
+cache_write_1h = 1.00
+cache_read = 0.05
+
+# Direct DeepSeek: peak USD rates used at all times as a conservative estimate.
+# Actual off-peak prices are half these rates. Automatic caching has no extra write fee.
+[deepseek]
+source = "https://api-docs.deepseek.com/quick_start/pricing/"
+date = 2026-11-02
+
+[deepseek.models.deepseek-flash]
+input = 0.30
+output = 1.20
+cache_write_5m = 0.30
+cache_write_1h = 0.30
+cache_read = 0.006
+
+# Alibaba: conservative USD estimates using the higher published regional rates.
+# These are not Beijing CNY invoices or a currency conversion. Operators can replace
+# them with their region's USD rates. Free quotas, batch and negotiated discounts excluded.
+# Implicit reads use 20% of input; explicit writes use 125%. No native TTL control is claimed.
+# Flash rates were retrieved from the official pricing page's indexed model table;
+# the current rendered table no longer lists Flash. Confirm in the console before relying on it.
+[dashscope]
+source = "https://www.alibabacloud.com/help/en/model-studio/model-pricing"
+date = 2026-11-02
+
+[dashscope.models.qwen3-vl-plus]
+input = 0.20
+output = 1.60
+cache_write_5m = 0.25
+cache_write_1h = 0.25
+cache_read = 0.04
+
+[dashscope.models.qwen3-vl-plus.long_context]
+above_input_tokens = 32_768
+input = 0.30
+output = 2.40
+cache_write_5m = 0.375
+cache_write_1h = 0.375
+cache_read = 0.06
+
+[dashscope.models.qwen3-vl-plus.long_context.long_context]
+above_input_tokens = 131_072
+input = 0.60
+output = 4.80
+cache_write_5m = 0.75
+cache_write_1h = 0.75
+cache_read = 0.12
+
+[dashscope.models.qwen3-vl-flash]
+input = 0.05
+output = 0.40
+cache_write_5m = 0.0625
+cache_write_1h = 0.0625
+cache_read = 0.01
+
+[dashscope.models.qwen3-vl-flash.long_context]
+above_input_tokens = 32_768
+input = 0.075
+output = 0.60
+cache_write_5m = 0.09375
+cache_write_1h = 0.09375
+cache_read = 0.015
+
+[dashscope.models.qwen3-vl-flash.long_context.long_context]
+above_input_tokens = 131_072
+input = 0.12
+output = 0.96
+cache_write_5m = 0.15
+cache_write_1h = 0.15
+cache_read = 0.024

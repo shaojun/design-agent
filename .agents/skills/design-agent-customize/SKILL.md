@@ -74,3 +74,13 @@ DeepSeek's adapter enables thinking and preserves/replays `reasoning_content` ac
 streaming responses and saved history. Do not replace it with plain `ChatOpenAI`, which drops that
 field. Effort defaults to `high`; the `look` role uses `low`, and `xhigh` maps to DeepSeek's `high`.
 Do not substitute a Claude or GPT id to bypass the registry.
+
+For OpenRouter Haiku, select `openai:anthropic/claude-haiku-5.5`, base URL
+`https://openrouter.ai/api/v1`, and key variable `OPENROUTER_API_KEY`. This registry entry uses
+Chat Completions and disables reasoning; do not claim native Anthropic features or enable
+thinking without validating OpenRouter reasoning-history replay. See [Models](../../../docs/models.md).
+
+When adding a chat model, update `config/prices.toml` with dated official sources and test token,
+cache and context-tier estimates. Missing prices must remain visibly incomplete in cost summaries
+and budget notices. The model meter excludes media and sandbox charges; never describe it as a
+total-spend limit. DeepSeek peak rates and Qwen regional estimates are explained in Models.

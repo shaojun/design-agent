@@ -72,7 +72,7 @@ class Price:
         """The price for a request whose prompt is `input_tokens` long."""
         if self.long_context is not None and self.long_context_above is not None:
             if input_tokens > self.long_context_above:
-                return self.long_context
+                return self.long_context.for_prompt(input_tokens)
         return self
 
 
@@ -97,17 +97,11 @@ def _price(row: Mapping[str, Any], *, provider: str, date: str, source: str, whe
         above = extra.get("above_input_tokens")
         if isinstance(above, bool) or not isinstance(above, int) or above <= 0:
             raise ValueError(f"{where}: long_context.above_input_tokens must be a token count")
-        lc = _rates(extra, f"{where}.long_context")
-        long_context = Price(
-            lc["input"],
-            lc["output"],
-            lc["cache_write_5m"],
-            lc["cache_write_1h"],
-            lc["cache_read"],
-            provider=provider,
-            date=date,
-            source=source,
+        long_context = _price(
+            extra, provider=provider, date=date, source=source, where=f"{where}.long_context"
         )
+        if long_context.long_context_above is not None and long_context.long_context_above <= above:
+            raise ValueError(f"{where}: long_context thresholds must increase")
     return Price(
         rates["input"],
         rates["output"],
@@ -300,6 +294,7 @@ class MeterSummary:
 
     usd: float = 0.0
     calls: int = 0
+    unpriced_calls: int = 0
     hit_ratio: float = 0.0
     by_source: Mapping[str, MeterSummary] = field(default_factory=dict)
     by_role: Mapping[str, MeterSummary] = field(default_factory=dict)
@@ -313,6 +308,7 @@ class MeterSummary:
 class _Totals:
     usd: float = 0.0
     calls: int = 0
+    unpriced_calls: int = 0
     input_tokens: int = 0
     cache_read: int = 0
     cache_write: int = 0
@@ -321,6 +317,7 @@ class _Totals:
     def add(self, other: _Totals) -> None:
         self.usd += other.usd
         self.calls += other.calls
+        self.unpriced_calls += other.unpriced_calls
         self.input_tokens += other.input_tokens
         self.cache_read += other.cache_read
         self.cache_write += other.cache_write
@@ -334,6 +331,7 @@ class _Totals:
         return MeterSummary(
             usd=self.usd,
             calls=self.calls,
+            unpriced_calls=self.unpriced_calls,
             hit_ratio=self.cache_read / self.input_tokens if self.input_tokens else 0.0,
             by_source=dict(by_source or {}),
             by_role=dict(by_role or {}),
@@ -377,6 +375,7 @@ class Meter:
         call = _Totals(
             usd=float(data.get("usd") or 0.0),
             calls=1,
+            unpriced_calls=int(data.get("priced") is False),
             input_tokens=tokens.input or _int(data.get("input_tokens")),
             cache_read=tokens.cache_read or _int(data.get("cache_read")),
             cache_write=tokens.cache_write or _int(data.get("cache_write")),

@@ -49,6 +49,8 @@ class ModelCapabilities:
     server_context_editing: bool = False
     streaming_tool_calls: bool = True
     responses_api: bool = False
+    requires_base_url: bool = False
+    """A compatible model must not silently use the default OpenAI endpoint."""
     integration_package: str = ""
     image_tokens_per_megapixel: int | None = None
     """Approximate input tokens for a 1-megapixel image; drives the look tool's budget."""
@@ -112,6 +114,7 @@ CAPABILITY_REGISTRY: dict[str, ModelCapabilities] = {
     "openai:gpt-5.6-sol": _openai("medium"),
     "openai:deepseek-flash": ModelCapabilities(
         provider="deepseek",
+        requires_base_url=True,
         vision=True,
         efforts=frozenset({"minimal", "low", "medium", "high", "xhigh", "max", "ultra"}),
         default_effort="high",
@@ -125,6 +128,7 @@ CAPABILITY_REGISTRY: dict[str, ModelCapabilities] = {
     **{
         f"openai:{name}": ModelCapabilities(
             provider="dashscope",
+            requires_base_url=True,
             vision=True,
             integration_package="langchain-openai",
             verified=True,
@@ -132,6 +136,18 @@ CAPABILITY_REGISTRY: dict[str, ModelCapabilities] = {
         )
         for name in ("qwen3-vl-plus", "qwen3-vl-flash")
     },
+    "openai:anthropic/claude-haiku-5.5": ModelCapabilities(
+        provider="openrouter",
+        requires_base_url=True,
+        vision=True,
+        context_window=1_000_000,
+        max_output_tokens=128_000,
+        integration_package="langchain-openai",
+        verified=True,
+        # ChatOpenAI does not replay OpenRouter reasoning_details across tool turns.
+        extra={"extra_body": {"reasoning": {"enabled": False}}},
+        notes="OpenRouter Haiku 5.5; Chat Completions, portable tools, reasoning disabled.",
+    ),
     "google_genai:gemini-3.6-flash": ModelCapabilities(
         provider="google_genai",
         vision=True,
@@ -192,6 +208,7 @@ def _portable(caps: ModelCapabilities, note: str) -> ModelCapabilities:
         max_output_tokens=caps.max_output_tokens,
         adaptive_thinking=caps.adaptive_thinking,
         streaming_tool_calls=caps.streaming_tool_calls,
+        requires_base_url=caps.requires_base_url,
         integration_package=caps.integration_package,
         image_tokens_per_megapixel=caps.image_tokens_per_megapixel,
         verified=caps.verified,

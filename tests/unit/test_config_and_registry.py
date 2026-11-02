@@ -128,7 +128,9 @@ def test_base_url_requires_a_named_key(monkeypatch: pytest.MonkeyPatch) -> None:
     assert build_chat_model(s, "lead").openai_api_base == "https://llm.example/v1"  # type: ignore[attr-defined]
 
 
-@pytest.mark.parametrize("model", ["deepseek-flash", "qwen3-vl-plus", "qwen3-vl-flash"])
+@pytest.mark.parametrize(
+    "model", ["deepseek-flash", "qwen3-vl-plus", "qwen3-vl-flash", "anthropic/claude-haiku-5.5"]
+)
 def test_compatible_vision_models_use_the_endpoint_for_every_inherited_role(
     model: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -148,11 +150,6 @@ def test_compatible_vision_models_use_the_endpoint_for_every_inherited_role(
         assert built.use_responses_api is False  # type: ignore[attr-defined]
         if model == "deepseek-flash":
             assert built.extra_body == {"thinking": {"type": "enabled"}}  # type: ignore[attr-defined]
-
-
-def test_compatible_models_require_an_explicit_endpoint() -> None:
-    with pytest.raises(ModelConfigurationError, match="BASE_URL"):
-        resolve_model(settings(model="openai:deepseek-flash"))
 
 
 def test_custom_endpoint_never_falls_back_to_the_openai_key(
@@ -234,3 +231,118 @@ def test_a_slack_name_mda_accepts_is_accepted(name: str) -> None:
 def test_a_slack_name_mda_would_reject_fails_before_the_deploy(name: str) -> None:
     with pytest.raises(ValueError, match="slack_name"):
         settings(slack_name=name)
+
+
+@pytest.mark.parametrize(
+    "model", ["deepseek-flash", "qwen3-vl-plus", "qwen3-vl-flash", "anthropic/claude-haiku-5.5"]
+)
+def test_compatible_models_require_an_explicit_endpoint(model: str) -> None:
+    with pytest.raises(ModelConfigurationError, match="MODEL_BASE_URL"):
+        resolve_model(settings(model=f"openai:{model}"))
+
+
+def test_openrouter_uses_chat_completions_without_native_thinking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from langchain_core.messages import HumanMessage
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "offline-router-key")
+    s = settings(
+        model="openai:anthropic/claude-haiku-5.5",
+        model_base_url="https://openrouter.ai/api/v1",
+        model_api_key_env="OPENROUTER_API_KEY",
+    )
+    model = build_chat_model(s)
+    payload = model._get_request_payload([HumanMessage("hello")])
+    assert payload["model"] == "anthropic/claude-haiku-5.5"
+    assert payload["extra_body"] == {"reasoning": {"enabled": False}}
+    assert "reasoning" not in payload and "reasoning_effort" not in payload
+    assert payload["max_completion_tokens"] == 128_000
+    assert resolve_model(s).caps.disclosure is ToolDisclosure.PORTABLE_SELECTOR
+
+
+def test_openrouter_haiku_price_is_available_to_the_meter() -> None:
+    from design_agent.harness.meter import price_of
+
+    price = price_of("openai:anthropic/claude-haiku-5.5")
+    assert price is not None
+    assert price.input == 0.10 and price.output == 0.50
+    assert price.long_context is not None
+
+
+async def test_openrouter_client_sends_reasoning_setting_and_replays_tool_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    import httpx
+    from langchain_core.messages import HumanMessage, ToolMessage
+    from langchain_core.tools import tool
+
+    monkeypatch.setenv("ROUTER_TEST_KEY", "offline-only")
+    seen = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        seen.append(payload)
+        assert str(request.url) == "https://openrouter.ai/api/v1/chat/completions"
+        assert request.headers["Authorization"] == "Bearer offline-only"
+        assert payload["model"] == "anthropic/claude-haiku-5.5"
+        assert payload["reasoning"] == {"enabled": False}
+        if len(seen) == 1:
+            message = {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call-1",
+                        "type": "function",
+                        "function": {"name": "add", "arguments": '{"a":17,"b":25}'},
+                    }
+                ],
+            }
+        else:
+            assert payload["messages"][-1]["role"] == "tool"
+            assert payload["messages"][-1]["content"] == "42"
+            message = {"role": "assistant", "content": "42"}
+        return httpx.Response(
+            200,
+            json={
+                "id": "offline",
+                "model": "anthropic/claude-haiku-5.5",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": message,
+                        "finish_reason": "tool_calls" if len(seen) == 1 else "stop",
+                    }
+                ],
+            },
+        )
+
+    @tool
+    def add(a: int, b: int) -> int:
+        """Add two integers."""
+        return a + b
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        model = build_chat_model(
+            settings(
+                model="openai:anthropic/claude-haiku-5.5",
+                model_base_url="https://openrouter.ai/api/v1",
+                model_api_key_env="ROUTER_TEST_KEY",
+            ),
+            http_async_client=client,
+            max_completion_tokens=128,
+        ).bind_tools([add])
+        request = HumanMessage("Add 17 and 25")
+        reply = await model.ainvoke([request])
+        call = reply.tool_calls[0]
+        result = await model.ainvoke(
+            [
+                request,
+                reply,
+                ToolMessage(str(add.invoke(call["args"])), tool_call_id=call["id"]),
+            ]
+        )
+    assert result.content == "42" and len(seen) == 2

@@ -18,10 +18,18 @@ generation uses `OPENAI_API_KEY` when it is set; without it, a deployment that u
 route, with the OpenAI key stored in that gateway workspace. For an OpenAI-compatible endpoint, set `DESIGN_AGENT_MODEL_BASE_URL` and
 `DESIGN_AGENT_MODEL_API_KEY_ENV` (the name of the variable that holds its key).
 
-## DeepSeek and Alibaba Cloud
+## OpenAI-compatible endpoints
 
 These endpoints use the installed OpenAI-compatible chat client (`openai:` selects the protocol,
-not the company receiving the request). Set all three endpoint settings together:
+not the company receiving the request). Configure the model, base URL and named key together:
+
+| Service | Registered model id | Base URL | Key variable |
+| --- | --- | --- | --- |
+| DeepSeek | `openai:deepseek-flash` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` |
+| Alibaba Model Studio | `openai:qwen3-vl-plus`, `openai:qwen3-vl-flash` | your console's regional compatible endpoint | `DASHSCOPE_API_KEY` |
+| OpenRouter | `openai:anthropic/claude-haiku-5.5` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
+
+For example:
 
 ```bash
 uv run design-agent config set \
@@ -62,6 +70,14 @@ model ids have been checked and added to the registry. Keys stay on the host, ou
 Image generation uses its independently selected provider: OpenAI (direct or through the
 LangSmith Gateway), or Alibaba. Changing the chat endpoint does not select a media provider.
 
+The OpenRouter entry uses Chat Completions and the portable tool selector. It disables reasoning
+because the client does not replay OpenRouter `reasoning_details`; effort settings do not enable
+it. Native Anthropic tool search, cache controls and context editing are not claimed. Clear role
+model overrides to move all roles to the lead's endpoint. Configuration follows the
+[OpenRouter SDK guide](https://openrouter.ai/docs/guides/community/openai-sdk).
+Offline request and tool-result tests cover the client contract. Validate live text, vision and
+tool calling with your account before relying on this route.
+
 ## Roles
 
 | Role | Setting | Default | What it does |
@@ -89,10 +105,12 @@ runs on the portable path (all features that do not depend on the provider).
 | `google_genai:gemini-3.6-flash` | bounded selector | no provider-side tool search |
 | `openai:deepseek-flash` | bounded selector | explicit DeepSeek endpoint; vision; thinking enabled with reasoning replay |
 | `openai:qwen3-vl-plus`, `openai:qwen3-vl-flash` | bounded selector | explicit Model Studio endpoint; vision and function calling |
+| `openai:anthropic/claude-haiku-5.5` | bounded selector | explicit OpenRouter endpoint; reasoning disabled |
 | anything else, the gateway's shared route, or a base URL | bounded selector | no provider-feature claims |
 
 Adding a model: add an entry with the facts from the provider's current documentation, a test in
-`tests/unit/test_config_and_registry.py`, and run the eval set (`docs/evals.md`) before relying on it.
+`tests/unit/test_config_and_registry.py`, dated prices in `config/prices.toml`, and run the eval set (`docs/evals.md`) before relying on it.
+Extend the configuration table above when needed; a new model does not need its own section.
 
 ## Cost and limits
 
@@ -158,3 +176,24 @@ For simple interface cues, use the sound skill's local `synth-cue.mjs` recipes o
 in the mix plan. They work without a key and remain available when a provider is missing. Generated
 effects use `source: "aliyun"`. Music remains separate: `generate_music` requires ElevenLabs or
 use a supplied track. Fun-Music access must be verified before a future integration.
+
+## Cost coverage and missing prices
+
+`config/prices.toml` estimates **chat model token costs in USD**, not the deployment's total bill.
+The current DeepSeek Flash entry uses peak rates even off-peak, so it is a conservative estimate.
+The Qwen VL entries use higher published regional USD rates, including the 32K and 128K input
+thresholds; they do not select a billing region, convert a Beijing CNY invoice, or apply free quota,
+batch, negotiated or account discounts. Change the dated price table for your billing region.
+Alibaba's current rendered price table omits Qwen3 VL Flash; its estimate uses the last rate table
+available in the official page's search index. Confirm that model's current rate in your console.
+Cached reads and writes are estimated separately; inspect the price-table comments for assumptions.
+
+A model missing a price still contributes token counts and an `unpriced_calls` count. CLI totals
+and Slack footers mark its cost incomplete. When a job budget is configured, the lead receives a
+one-time warning that missing prices prevent checking the full spend. The existing budget remains
+a soft notification, not a hard spending limit.
+
+Image, voice, effects, music, transcription and sandbox charges are **excluded** from this model
+meter and budget. Alibaba audio sidecars retain provider usage when supplied, but that is not a
+USD charge or a unified media-cost ledger. Model pricing must not be used to claim a media-inclusive
+budget. No price entry or zero estimate makes an unpriced service free.

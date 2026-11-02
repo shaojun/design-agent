@@ -116,3 +116,15 @@ Confirm each URL still resolves when you move a pin forward; the docs site renam
 ## Skills format
 
 - Agent Skills specification: <https://agentskills.io/specification>
+
+## OpenRouter
+
+- Haiku model metadata and pricing: <https://openrouter.ai/anthropic/claude-haiku-5.5>
+- OpenAI-compatible SDK configuration: <https://openrouter.ai/docs/guides/community/openai-sdk>
+- Reasoning and replay requirements: <https://openrouter.ai/docs/guides/best-practices/reasoning-tokens>
+
+## Provider cost estimates
+
+- Direct DeepSeek peak/off-peak rates: <https://api-docs.deepseek.com/quick_start/pricing/>
+- Model Studio regional/token-tier rates: <https://www.alibabacloud.com/help/en/model-studio/model-pricing>
+- Model Studio cache billing: <https://www.alibabacloud.com/help/en/model-studio/context-cache>
