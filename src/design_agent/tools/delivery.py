@@ -122,6 +122,7 @@ def build_upload_tool(
     thread_id_for: Callable[[Any], str],
 ) -> BaseTool:
     """`upload_files(paths)` for runtimes without MDA's Slack channel."""
+    limit = min(MAX_FILE_BYTES, getattr(adapter, "max_file_bytes", MAX_FILE_BYTES))
 
     def upload_files(
         paths: Annotated[list[str], Field(min_length=1, max_length=MAX_FILES)],
@@ -142,8 +143,8 @@ def build_upload_tool(
         for path, result in zip(normalized, results, strict=True):
             if result.error is not None or result.content is None:
                 return "The workspace file could not be read."
-            if len(result.content) > MAX_FILE_BYTES:
-                return f"Attachment exceeds the {MAX_FILE_BYTES // (1024 * 1024)} MiB limit."
+            if len(result.content) > limit:
+                return f"Attachment exceeds the {limit // (1024 * 1024)} MiB limit."
             name = delivered_name(path)
             if name in names:
                 return "Two files share a name; rename one before uploading."
@@ -158,7 +159,10 @@ def build_upload_tool(
     return StructuredTool.from_function(
         func=upload_files,
         name=UPLOAD_TOOL,
-        description="Upload 1 to 10 workspace files as one attachment batch to the person.",
+        description=(
+            "Upload 1 to 10 workspace files as one attachment batch to the person. "
+            f"Each file must be at most {limit // (1024 * 1024)} MiB."
+        ),
     )
 
 

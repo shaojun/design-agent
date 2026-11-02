@@ -49,6 +49,10 @@ people drop in the thread are in `/workspace/attachments/`.
    <file>:<W>x<H> ...`.
 4. Deliver with `upload_files`, then reply in one or two lines naming the calls you made.
 
+The delivery tool states the current channel's per-file limit (Feishu: 30 MiB). Check final file
+sizes before uploading; reduce or split an oversized output and recheck its contract. An
+unconfirmed upload is not delivery: report it and keep the source files for recovery.
+
 Motion adds `node /workspace/tools/video-gate.mjs <index.html>` and `hyperframes check` (it lints
 too) before any render, and a storyboard sign-off before production.
 

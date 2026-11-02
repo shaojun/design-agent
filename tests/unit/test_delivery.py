@@ -72,6 +72,22 @@ def test_upload_tool_copies_files_and_refuses_paths_outside_workspace(tmp_path: 
     assert "could not be read" in func(paths=["/workspace/missing.png"], runtime=Runtime())
 
 
+def test_upload_tool_respects_the_channels_lower_limit(tmp_path: Path) -> None:
+    class SmallChannel(LocalOutputAdapter):
+        max_file_bytes = 1024 * 1024
+
+    backend = FakeBackend({"/workspace/big.pdf": b"x" * (1024 * 1024 + 1)})
+    tool = build_upload_tool(
+        adapter=SmallChannel(tmp_path),
+        backend_for=lambda _rt: backend,  # type: ignore[arg-type,return-value]
+        thread_id_for=lambda _rt: "t-1",
+    )
+    assert "1 MiB" in tool.description
+    result = tool.func(paths=["/workspace/big.pdf"], runtime=Runtime())  # type: ignore[attr-defined]
+    assert result == "Attachment exceeds the 1 MiB limit."
+    assert not list(tmp_path.iterdir())
+
+
 def _request(paths: list[str]) -> ToolCallRequest:
     return ToolCallRequest(
         tool_call={
