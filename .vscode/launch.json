@@ -17,6 +17,24 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "subProcess": false
+        },
+        {
+            "name": "Design Agent: Feishu",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "program": "${workspaceFolder}/.venv/bin/design-agent",
+            "args": ["feishu"],
+            "cwd": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
+                "DESIGN_AGENT_WORKSPACE_ROOT": "workspace/feishu"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "subProcess": false
         }
     ]
 }

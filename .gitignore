@@ -17,6 +17,7 @@ workspace/projects/*
 !workspace/projects/.gitkeep
 workspace/out/
 workspace/state/
+workspace/feishu/
 
 # Build and tool output
 .mda/
