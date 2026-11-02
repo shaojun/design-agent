@@ -55,7 +55,9 @@ sibling skill of ours, or send the change upstream.
   ([integrations](../../../docs/integrations.md)). MDA serves HTTP and SSE only. Paper is configured
   with `PAPER_*`, not here ([Paper](../../../docs/partners/paper.md)).
 - **Media keys:** `OPENAI_API_KEY` (images), `ELEVENLABS_API_KEY` (voice, music, sound effects),
-  `GROQ_API_KEY` (transcription).
+  `GROQ_API_KEY` (transcription). For Alibaba images/voice/effects, set `DASHSCOPE_API_KEY`,
+  `ALIYUN_OPENAI_BASE_URL`, `ALIYUN_DASHSCOPE_BASE_URL`, and explicitly select the media providers;
+  see [Models](../../../docs/models.md). Chat model configuration does not configure media tools.
 - **A new host tool** is code in `src/design_agent/tools/`: keys stay on the host and results drop
   into the sandbox as files. Follow the change discipline in `AGENTS.md`.
 
@@ -64,3 +66,11 @@ sibling skill of ours, or send the change upstream.
 `uv run design-agent config set DESIGN_AGENT_MODEL=provider:model`, then
 `uv run design-agent test model`. `DESIGN_AGENT_JOB_BUDGET_USD` makes the agent ask before passing
 a budget; `DESIGN_AGENT_HELPER_EFFORT_CAP` caps helpers' effort. More: [Customization](../../../docs/customization.md).
+
+For DeepSeek or Alibaba Cloud Model Studio, use the exact registered `openai:` model id with
+`DESIGN_AGENT_MODEL_BASE_URL` and `DESIGN_AGENT_MODEL_API_KEY_ENV`; see [Models](../../../docs/models.md).
+Keep the named key on the host. A text ping does not verify vision or a tool-result round trip.
+DeepSeek's adapter enables thinking and preserves/replays `reasoning_content` across tool calls,
+streaming responses and saved history. Do not replace it with plain `ChatOpenAI`, which drops that
+field. Effort defaults to `high`; the `look` role uses `low`, and `xhigh` maps to DeepSeek's `high`.
+Do not substitute a Claude or GPT id to bypass the registry.

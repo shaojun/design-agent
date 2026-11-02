@@ -34,6 +34,13 @@ the provider, which validates them and explains a refusal in its own words: read
 adjust rather than guessing from memory what is allowed. Every call spends money: explore at low
 quality, finish once at high.
 
+The tool description names the configured provider. With Alibaba Qwen Image, use a `.png` output;
+`quality` has no effect (the provider uses its defaults), and `output_format` must be omitted or
+`png`. Provider extensions such as `seed`, `prompt_extend` and `negative_prompt` go in `params`.
+Transparent background is a prompt request and is checked in the returned pixels; it is not a
+guarantee. Do not assume low/high quality changes Alibaba pricing. A provider change never happens
+implicitly when a request fails.
+
 The prompt is the leverage: concrete subject, action, medium, light, composition, and "no text, no
 words, no letters, no logos". Prompting craft, schemas for complex scenes and the failure modes:
 [references/craft.md](references/craft.md).

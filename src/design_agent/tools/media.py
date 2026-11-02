@@ -24,6 +24,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import JsonValue
 
 from design_agent.config import Settings
+from design_agent.tools import aliyun
 from design_agent.tools.files import (
     BackendFor,
     WorkspaceError,
@@ -331,10 +332,10 @@ def build_media_tools(settings: Settings, backend_for: BackendFor) -> list[BaseT
 
     async def generate_voiceover(
         text: str,
-        voice_id: str,
         sandbox_path: str,
         runtime: ToolRuntime,
-        model: str = "eleven_v4",
+        voice_id: str | None = None,
+        model: str | None = None,
         speed: float | None = None,
         stability: float | None = None,
         similarity_boost: float | None = None,
@@ -343,10 +344,14 @@ def build_media_tools(settings: Settings, backend_for: BackendFor) -> list[BaseT
         next_text: str | None = None,
         seed: int | None = None,
         output_format: str = "mp3_44100_192",
+        instruction: str | None = None,
     ) -> str:
-        """Speak one voiceover line with ElevenLabs; save the mp3 and its word timings beside it.
+        """Speak one line with the configured TTS provider; save mp3 and word timings beside it.
 
-        Read the sound skill first. Direct the delivery inside `text` with bracketed audio tags
+        Read the sound skill first. Alibaba uses the configured voice when voice_id is omitted,
+        and instruction for delivery direction; stability, similarity_boost, style and neighbouring
+        text are ElevenLabs-only. Every call spends credits. For ElevenLabs, direct delivery with
+        bracketed audio tags
         where it should change ("[warm] Meet the new canvas. [pause] It ships today."), ellipses
         for pauses and capitals for stress. One call per line, passing the neighbouring lines as
         previous_text and next_text so the read flows across cuts. stability, similarity_boost
@@ -356,6 +361,63 @@ def build_media_tools(settings: Settings, backend_for: BackendFor) -> list[BaseT
         try:
             path = workspace_path(sandbox_path)
             backend = require_backend(backend_for, runtime)
+            if settings.tts_provider == "aliyun":
+                if not settings.dashscope_api_key:
+                    return "voiceover unavailable: no DASHSCOPE_API_KEY configured."
+                if any(
+                    v is not None
+                    for v in (stability, similarity_boost, style, previous_text, next_text)
+                ):
+                    return "rejected: Alibaba TTS uses instruction, not ElevenLabs voice settings or neighbouring text."
+                if output_format != "mp3_44100_192" or not path.lower().endswith(".mp3"):
+                    return (
+                        "rejected: Alibaba voiceover writes .mp3 at 44100 Hz; omit output_format."
+                    )
+                if speed is not None and not 0.5 <= speed <= 2:
+                    return "rejected: Alibaba speed must be between 0.5 and 2."
+                voice_id = voice_id or settings.tts_voice
+                model = model or settings.tts_model
+                inputs: dict[str, JsonValue] = {
+                    "text": text,
+                    "voice": voice_id,
+                    "format": "mp3",
+                    "sample_rate": 44100,
+                    "word_timestamp_enabled": True,
+                }
+                for name, value in (("rate", speed), ("instruction", instruction), ("seed", seed)):
+                    if value is not None:
+                        inputs[name] = value
+                speech = await aliyun.synthesize(
+                    settings.dashscope_api_key.get_secret_value(),
+                    settings.aliyun_dashscope_base_url,
+                    model,
+                    inputs,
+                )
+                written = await write_bytes(backend, path, bytes(speech.audio))
+                timings = f"{posixpath.splitext(written)[0]}.words.json"
+                words = speech.words
+                duration = max((float(w["end"]) for w in words), default=0.0)  # type: ignore[arg-type]
+                record = {
+                    "text": text,
+                    "provider": "aliyun",
+                    "voice_id": voice_id,
+                    "model": model,
+                    "duration_s": duration,
+                    "words": words,
+                    "usage": speech.usage,
+                }
+                await write_bytes(backend, timings, json.dumps(record, ensure_ascii=False).encode())
+                note = (
+                    ""
+                    if words
+                    else " Word timestamps unavailable; transcribe before syncing captions."
+                )
+                return f"wrote {len(speech.audio) // 1024} KB to {written}; {len(words)} word timings in {timings}.{note}"
+            if instruction is not None:
+                return "rejected: instruction is supported by Alibaba TTS; use inline tags for ElevenLabs."
+            model = model or "eleven_v4"
+            if not voice_id:
+                return "rejected: ElevenLabs requires voice_id."
             if not VOICE_ID.fullmatch(voice_id):
                 return "rejected: voice_id must be an ElevenLabs voice id."
             voice: dict[str, JsonValue] = {}
@@ -406,6 +468,7 @@ def build_media_tools(settings: Settings, backend_for: BackendFor) -> list[BaseT
             timings = f"{posixpath.splitext(written)[0]}.words.json"
             record = {
                 "text": text,
+                "provider": "elevenlabs",
                 "voice_id": voice_id,
                 "model": model,
                 "duration_s": duration,
@@ -430,17 +493,54 @@ def build_media_tools(settings: Settings, backend_for: BackendFor) -> list[BaseT
         prompt_influence: float | None = None,
         output_format: str = "mp3_44100_192",
     ) -> str:
-        """Generate one sound effect with ElevenLabs and save it as mp3 under /workspace.
+        """Generate one effect with the configured provider; save mp3 under /workspace.
 
-        For a signature sound, an exact-length ambience or loop. The sound skill's synthesized cue
-        library covers interface sounds without a key. Describe the sound in audio terms (source,
-        material, envelope, space). duration_seconds is 0.5 to 30 or None; loop=True makes a
-        seamless loop; prompt_influence 0 to 1. Every call spends credits.
+        Prefer the sound skill's local synth-cue.mjs recipes for clicks, ticks and swipes: no key
+        or API cost. Use this tool for richer effects or ambience. Describe source, material,
+        envelope and space. duration_seconds is 0.5 to 30 or None. For Alibaba, duration is a prompt
+        target: measure the file before placing or trimming it; seamless loops are unsupported.
+        loop and prompt_influence are ElevenLabs-only. Every generation call spends credits.
         """
         try:
             path = workspace_path(sandbox_path)
             if duration_seconds is not None and not 0.5 <= duration_seconds <= 30:
                 return "rejected: duration_seconds must be between 0.5 and 30."
+            if settings.sfx_provider == "aliyun":
+                if not settings.dashscope_api_key:
+                    return "sound effects unavailable: no DASHSCOPE_API_KEY configured; local synth cues remain available."
+                if loop or prompt_influence is not None:
+                    return "rejected: Alibaba effects do not support loop or prompt_influence; use a local synth cue or edit the generated audio."
+                if output_format != "mp3_44100_192" or not path.lower().endswith(".mp3"):
+                    return "rejected: Alibaba effects write .mp3 at 44100 Hz; omit output_format."
+                backend = require_backend(backend_for, runtime)
+                effect = await aliyun.sound_effect(
+                    settings.dashscope_api_key.get_secret_value(),
+                    settings.aliyun_dashscope_base_url,
+                    settings.sfx_model,
+                    prompt,
+                    duration_seconds,
+                )
+                data = await _download(
+                    effect.url,
+                    cap_mb=25,
+                    provider="Alibaba sound effect",
+                )
+                if not data:
+                    return "Alibaba returned empty audio; no file written."
+                written = await write_bytes(backend, path, data)
+                metadata = f"{posixpath.splitext(written)[0]}.audio.json"
+                record = {
+                    "provider": "aliyun",
+                    "model": settings.sfx_model,
+                    "prompt": prompt,
+                    "requested_duration_s": duration_seconds,
+                    "provider_duration_s": effect.duration,
+                    "usage": effect.usage,
+                }
+                await write_bytes(
+                    backend, metadata, json.dumps(record, ensure_ascii=False).encode()
+                )
+                return f"wrote {len(data) // 1024} KB to {written}; source=aliyun; metadata in {metadata}. Duration is a prompt target: measure with ffprobe, then trim/place; listen for unwanted speech or music."
             if prompt_influence is not None and not 0 <= prompt_influence <= 1:
                 return "rejected: prompt_influence must be between 0 and 1."
             body: dict[str, JsonValue] = {
@@ -460,6 +560,8 @@ def build_media_tools(settings: Settings, backend_for: BackendFor) -> list[BaseT
             return str(error)
         except httpx.HTTPError:
             return "sound effect request failed."
+        except (ValueError, TypeError, KeyError, AttributeError):
+            return "sound effect unavailable: invalid configuration or provider response."
 
     async def generate_music(
         sandbox_path: str,
@@ -550,11 +652,13 @@ def build_media_tools(settings: Settings, backend_for: BackendFor) -> list[BaseT
         params: dict[str, JsonValue] | None = None,
         model: str | None = None,
     ) -> str:
-        """Generate images with OpenAI's image models and save them under /workspace.
+        """Generate images with the configured provider and save them under /workspace.
 
         Read the image-generation skill first. Anything with the logo or exact copy is built in
         HTML on brand, not left to the image model: composite real text and logos afterwards.
-        Model (default from DESIGN_AGENT_IMAGE_MODEL), size, quality, n and params pass through to
+        Alibaba uses Qwen Image, PNG output and provider defaults for quality. OpenAI supports
+        quality/background/output_format. Alibaba transparent cut-outs are requested in the prompt.
+        Model (default from DESIGN_AGENT_IMAGE_MODEL), size, n and params pass through to
         the provider, which validates them and explains a refusal. For n > 1 paths get _0, _1
         suffixes. For a cut-out use background='transparent' and output_format='png' and ask for an
         isolated subject; the result reports whether the pixels really have alpha.
@@ -562,29 +666,62 @@ def build_media_tools(settings: Settings, backend_for: BackendFor) -> list[BaseT
         try:
             path = workspace_path(sandbox_path)
             backend = require_backend(backend_for, runtime)
-            if not keys.openai:
-                return "image generation unavailable: no OPENAI_API_KEY configured."
+            is_aliyun = settings.image_provider == "aliyun"
+            key = (
+                (
+                    settings.dashscope_api_key.get_secret_value()
+                    if settings.dashscope_api_key
+                    else None
+                )
+                if is_aliyun
+                else keys.openai
+            )
+            provider = "Alibaba" if is_aliyun else "OpenAI"
+            if not key:
+                name = "DASHSCOPE_API_KEY" if is_aliyun else "OPENAI_API_KEY"
+                return f"image generation unavailable: no {name} configured."
+            if is_aliyun and (
+                output_format not in (None, "png") or not path.lower().endswith(".png")
+            ):
+                return "rejected: Qwen Image writes PNG; use a .png path and omit output_format."
+            if is_aliyun and background not in (None, "auto", "opaque", "transparent"):
+                return "rejected: background must be auto, opaque or transparent."
             body: dict[str, JsonValue] = {
                 "model": model or keys.image_model,
                 "prompt": prompt,
                 "size": size,
-                "quality": quality,
                 "n": n,
             }
-            if background is not None:
+            if not is_aliyun:
+                body["quality"] = quality
+            if background is not None and not is_aliyun:
                 body["background"] = background
-            if output_format is not None:
+            if output_format is not None and not is_aliyun:
                 body["output_format"] = output_format
             if params:
                 body.update(params)
-            wants_alpha = str(body.get("background", "")).strip().lower() == "transparent"
+            if is_aliyun and any(k in body for k in ("quality", "background", "output_format")):
+                return "rejected: Qwen Image does not support quality, background or output_format params."
+            wants_alpha = background == "transparent" or body.get("background") == "transparent"
+            if is_aliyun and wants_alpha:
+                body["prompt"] = (
+                    str(body["prompt"])
+                    + " Output an isolated object on actual fully transparent alpha; no backdrop."
+                )
+            url = (
+                aliyun.endpoint(settings.aliyun_openai_base_url, "/images/generations")
+                if is_aliyun
+                else f"{OPENAI_BASE_URL}/images/generations"
+            )
             async with httpx.AsyncClient(timeout=240, follow_redirects=False) as client:
                 response = await client.post(
-                    f"{OPENAI_BASE_URL}/images/generations",
-                    headers={"Authorization": f"Bearer {keys.openai}"},
+                    url,
+                    headers={"Authorization": f"Bearer {key}"},
                     json=body,
                 )
             if response.status_code != 200:
+                if is_aliyun:
+                    return aliyun.failure(response.status_code)
                 return f"image generation failed: OpenAI HTTP {response.status_code}{_reason(response)}"
             items = response.json().get("data") or []
             written: list[str] = []
@@ -597,7 +734,9 @@ def build_media_tools(settings: Settings, backend_for: BackendFor) -> list[BaseT
                     data = base64.b64decode(encoded, validate=True)
                 elif item.get("url"):
                     data = await _download(
-                        item["url"], cap_mb=_IMAGE_GEN_CAP_MB, provider="OpenAI image"
+                        aliyun.asset_url(item["url"]) if is_aliyun else item["url"],
+                        cap_mb=_IMAGE_GEN_CAP_MB,
+                        provider=f"{provider} image",
                     )
                 else:
                     continue
@@ -625,7 +764,27 @@ def build_media_tools(settings: Settings, backend_for: BackendFor) -> list[BaseT
         generate_music,
         transcribe_audio,
     )
-    return [StructuredTool.from_function(coroutine=f, name=f.__name__) for f in functions]
+    tools: list[BaseTool] = [
+        StructuredTool.from_function(coroutine=f, name=f.__name__) for f in functions
+    ]
+    for tool in tools:
+        if tool.name == "generate_voiceover":
+            tool.description += f" Configured provider: {settings.tts_provider}."
+            if settings.tts_provider == "aliyun":
+                tool.description += f" Default model: {settings.tts_model}; default voice: {settings.tts_voice}. Omit voice_id and model to use them."
+        elif tool.name == "generate_image":
+            tool.description += f" Configured provider: {settings.image_provider}; default model: {settings.image_model}."
+        elif tool.name == "generate_sound_effect":
+            tool.description += f" Configured provider: {settings.sfx_provider}."
+            if settings.sfx_provider == "aliyun":
+                tool.description += (
+                    f" Model: {settings.sfx_model}. Mark sound-plan source as aliyun."
+                    " The host prepends: No speech, narration, singing or music."
+                    " Do not request music, piano chords or a musical score through this tool;"
+                    " use generate_music when available, an approved existing track, or the"
+                    " sound skill's local synth-cue.mjs for tonal cues."
+                )
+    return tools
 
 
 async def _groq_transcript(key: str, data: bytes, path: str) -> str:

@@ -51,7 +51,7 @@ const lineInfo = (file) => {
     if (!existsSync(candidate)) continue;
     try {
       const data = JSON.parse(readFileSync(candidate, "utf8"));
-      const source = data && !Array.isArray(data) && data.voice_id ? "elevenlabs" : "supplied";
+      const source = data && !Array.isArray(data) && data.voice_id ? (data.provider || "elevenlabs") : "supplied";
       if (typeof data.text === "string") return { text: data.text, source };
       const words = Array.isArray(data) ? data : data.words || [];
       return { text: words.map((w) => w.word ?? w.text ?? "").join(" ").replace(/\s+/g, " ").trim(), source };

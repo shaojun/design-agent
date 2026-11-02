@@ -73,6 +73,17 @@ test("the sound resolver only reads slug-named files inside the job's assets", (
   assert.deepEqual(ledger.map((e) => e.source).sort(), ["supplied", "synth"]);
 });
 
+test("Alibaba voice files keep their provider in the sound ledger", () => {
+  const assets = mkdtempSync(join(tmpdir(), "aliyun-voice-"));
+  mkdirSync(join(assets, "vo"));
+  writeFileSync(join(assets, "vo", "line.mp3"), "audio");
+  assert.ok(resolveFile({ assetsDir: assets, kind: "vo", file: "vo/line.mp3", source: "aliyun" }));
+  const [entry] = JSON.parse(readFileSync(join(assets, "ledger.json"), "utf8"));
+  assert.equal(entry.source, "aliyun");
+  assert.equal(entry.resolved, "host-generated");
+  assert.deepEqual(entry.license, { source: "aliyun", generative: true });
+});
+
 test("the thumbnail gate reads the hero from the comp without a browser", () => {
   const comp = readComp(`<style>.t{font:600 96px/1.05 'Brand Display';left:80px;top:120px;width:640px;height:220px}</style>
     <h1 class="t" data-thumb-role="hero">Ship it <em>today</em></h1><img src="shot.png" style="width:900px">`);

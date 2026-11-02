@@ -14,7 +14,7 @@ from typing import Literal
 
 from design_agent.brand.schema import BrandPackError, load_brand_pack
 from design_agent.config import Settings
-from design_agent.models.factory import Role, resolve_model
+from design_agent.models.factory import Role, named_key, resolve_model
 from design_agent.models.registry import ModelConfigurationError, ToolDisclosure
 
 Status = Literal["ok", "warn", "fail"]
@@ -104,7 +104,17 @@ def _check_models(settings: Settings) -> list[Check]:
         )
     spec = settings.lead_model()
     provider = spec.upstream.provider if spec.via_gateway else spec.provider
-    if spec.via_gateway:
+    if settings.model_base_url and not spec.via_gateway:
+        name = settings.model_api_key_env or "DESIGN_AGENT_MODEL_API_KEY_ENV"
+        has_key = named_key(settings.model_api_key_env) is not None
+        checks.append(
+            Check(
+                "model:key",
+                "ok" if has_key else "warn",
+                f"{name} {'set' if has_key else 'missing'}",
+            )
+        )
+    elif spec.via_gateway:
         has_key = (
             settings.langsmith_gateway_api_key is not None or settings.langsmith_api_key is not None
         )
@@ -138,6 +148,45 @@ def missing_model_key(settings: Settings) -> str | None:
                 else "LANGSMITH_GATEWAY_API_KEY"
             )
     return None
+
+
+def _check_media(settings: Settings) -> list[Check]:
+    from design_agent.tools.aliyun import endpoint
+    from design_agent.tools.files import WorkspaceError
+
+    checks = []
+    for kind, provider, base, key in (
+        (
+            "sfx",
+            settings.sfx_provider,
+            settings.aliyun_dashscope_base_url,
+            settings.elevenlabs_api_key,
+        ),
+        (
+            "image",
+            settings.image_provider,
+            settings.aliyun_openai_base_url,
+            settings.openai_api_key,
+        ),
+        (
+            "tts",
+            settings.tts_provider,
+            settings.aliyun_dashscope_base_url,
+            settings.elevenlabs_api_key,
+        ),
+    ):
+        detail = f"{provider}; "
+        ready = key is not None
+        if provider == "aliyun":
+            ready = settings.dashscope_api_key is not None
+            try:
+                endpoint(base, "")
+            except WorkspaceError:
+                ready = False
+            detail += "requires DASHSCOPE_API_KEY and matching ALIYUN base URL; "
+        detail += "configured (access unverified)" if ready else "not configured"
+        checks.append(Check(f"media:{kind}", "ok" if ready else "warn", detail))
+    return checks
 
 
 def _check_brand(settings: Settings, root: Path) -> Check:
@@ -283,6 +332,7 @@ def run_checks(settings: Settings, root: Path) -> list[Check]:
         _check_python(),
         _check_packages(),
         *_check_models(settings),
+        *_check_media(settings),
         _check_brand(settings, root),
         _check_sandbox(settings),
         _check_node(),

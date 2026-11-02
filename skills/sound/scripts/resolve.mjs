@@ -44,6 +44,7 @@ function ledgerPush(assetsDir, entry) {
 
 const MADE = /^(music|sfx|vo)\/([A-Za-z0-9_-]{1,128})\.(mp3|wav)$/;
 const MADE_BY = {
+  aliyun: { resolved: "host-generated", license: { source: "aliyun", generative: true } },
   elevenlabs: { resolved: "host-generated", license: { source: "elevenlabs", generative: true } },
   code: { resolved: "sandbox-made", license: { source: "procedural", generative: false } },
   supplied: { resolved: "supplied", license: { source: "supplied with the request", generative: false } },

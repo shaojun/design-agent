@@ -2,6 +2,12 @@
 
 ## Directing a voiceover
 
+For Alibaba, use the configured model and its matching voice (omit tool overrides to use the
+defaults). Put delivery direction in `instruction`, not bracketed text. Use `speed` for rate;
+neighbouring text and ElevenLabs voice controls are rejected. The guidance below on bracket tags,
+continuity parameters and stability applies to ElevenLabs. Both providers write word timings;
+Alibaba timings may label individual Chinese characters rather than space-separated words.
+
 - **Voice.** Any voice id from the provider's library works; pick one whose register fits the brand's
   voice (`/workspace/brand/voice.md`) and say which one you used so the next film can match it.
 - **Continuity.** One call per line, with `previous_text` and `next_text`, so the read flows across
@@ -42,7 +48,7 @@
 }
 ```
 
-- `source` is `elevenlabs` (made by a host tool), `code` (made in the sandbox), `supplied` (came with
+- `source` is `elevenlabs` or `aliyun` (made by a host tool), `code` (made in the sandbox), `supplied` (came with
   the request) or, for cues only, `synth` with a `recipe`. Files live in `<jobDir>/sound-assets/` under
   their kind's folder with a slug name; anything else is skipped with a warning.
 - A bed that starts after 0 (`start_s` > 0) fades in over `crossfade_in_s`; one that starts at 0 fades

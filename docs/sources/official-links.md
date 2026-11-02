@@ -86,9 +86,21 @@ Confirm each URL still resolves when you move a pin forward; the docs site renam
 - Anthropic vision (image token cost): <https://platform.claude.com/docs/en/build-with-claude/vision>
 - OpenAI tool search: <https://developers.openai.com/api/docs/guides/tools-tool-search>
 - OpenAI image generation: <https://developers.openai.com/api/docs/guides/image-generation>
+- DeepSeek model metadata, vision and thinking/tool-history requirements:
+  <https://api-docs.deepseek.com/api/list-models/>,
+  <https://api-docs.deepseek.com/guides/vision/>,
+  <https://api-docs.deepseek.com/guides/thinking_mode/>
+- Alibaba Cloud Model Studio compatible endpoints, vision and function calling:
+  <https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope>,
+  <https://www.alibabacloud.com/help/en/model-studio/qwen-vl-compatible-with-openai>,
+  <https://www.alibabacloud.com/help/en/model-studio/qwen-function-calling>
 
 ## Media services (optional)
 
+- Alibaba Qwen Image API: <https://help.aliyun.com/en/model-studio/qwen-image-generation-and-editing-api-reference>
+- Alibaba Qwen Audio TTS HTTP API: <https://help.aliyun.com/en/model-studio/qwen-audio-tts-http-api>
+- Alibaba TTS-Next audio generation API: <https://help.aliyun.com/en/model-studio/audio-generation-api>
+- Alibaba Qwen Audio voice list: <https://help.aliyun.com/en/model-studio/qwen-audio-tts-voice-list>
 - ElevenLabs text to speech and music: <https://elevenlabs.io/docs>
 - FFmpeg: <https://ffmpeg.org/documentation.html>
 - Chrome Headless Shell: <https://developer.chrome.com/blog/chrome-headless-shell>

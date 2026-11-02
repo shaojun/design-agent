@@ -23,12 +23,44 @@ the sandbox.
 Generated files go under `<jobDir>/sound-assets/<music|sfx|vo>/<slug>.mp3|wav`, where the plan finds
 them. Every generation spends credits; say what a pass cost.
 
+The voiceover tool's description names the configured provider and defaults. With Alibaba TTS,
+omit `voice_id` and `model` to use those defaults; use `instruction` for delivery direction and
+plain spoken text, not ElevenLabs bracket tags. Do not pass `previous_text`, `next_text`, `stability`,
+`similarity_boost` or `style`. Word timings use the same `.words.json` schema; missing timings are
+explicit and require transcription before syncing captions. Mark Alibaba voice files with
+`source: "aliyun"` in the sound plan.
+
+The effect tool's description names its separately configured provider. Alibaba TTS-Next generates
+effects and ambience; put its files in the plan with `source: "aliyun"`. Duration is a prompt target,
+not an exact API control: measure with `ffprobe` and trim before placing. Do not pass `loop=true` or
+`prompt_influence`; they are unsupported. Check for unwanted speech/music before delivery. Prefer
+the local synthesizer for simple UI cues: `ui-tick`, `ui-confirm`, `ui-soft-in`, `ui-alert`, `ui-swipe`
+(`--list` for all recipes); mark them `source: "synth"` with a `recipe`. A missing music generator
+does not prevent sound effects. Music still needs its own provider key or a supplied track. Report
+voice, effects and music availability separately; never silently substitute a synth for a failed API call.
+
+Alibaba effect requests are prefixed by the host with "No speech, narration, singing or music."
+Do not use that tool for piano chords, musical stings or a score. Use `generate_music` when available,
+an approved existing track, or local synth cues for tonal accents.
+
+For an optional spectrogram, use
+`node /workspace/skills/sound/scripts/spectrogram.mjs <audio> <out.png> [start_s] [window_s]`.
+It uses a fixed FFT-friendly height, reads at most 30 seconds (10 by default), and stops FFmpeg after
+10 seconds. Avoid ad hoc `showspectrumpic` loops with arbitrary heights such as 220: they are slow
+in the sandbox. If the diagnostic fails, skip it rather than retrying or blocking the mix.
+Use the spectrogram only for simple timing checks: locate an onset, an ending or a pause against
+the cue's intended time. Do not use it for timbre analysis, semantic classification or repeated
+quality-scoring rounds, and do not regenerate an effect just because its plot looks unfamiliar.
+It cannot establish convincing sound quality or certify that speech/music is absent. Do not
+describe visual inspection as listening. Deliver a preview for a person to audition; only their
+explicit confirmation approves the sound for production. Automated checks do not replace that review.
+
 ## How a film gets scored
 
 A starting point, not a procedure; change the order when the film asks for it.
 
 1. **Voiceover first.** A film with voiceover is cut to the voiceover, not the music. Speak every
-   line with `generate_voiceover` before anything else, passing the neighbouring lines as
+   line with `generate_voiceover` before anything else; on ElevenLabs, pass neighbouring lines as
    `previous_text` and `next_text`. The word timings are the anchors that cuts, captions and effects
    land on; timing locks when the animatic is approved against them.
 2. **The bed.** Generate or take the supplied track, trimmed to the film. When music must hit the

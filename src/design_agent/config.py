@@ -123,7 +123,23 @@ class Settings(BaseSettings):
     private_fonts_dir: Path = Path("private-fonts")
 
     # Media providers (host tools; keys never enter the sandbox)
+    image_provider: Literal["openai", "aliyun"] = "openai"
     image_model: str = "gpt-image-2.5-flare"
+    tts_provider: Literal["elevenlabs", "aliyun"] = "elevenlabs"
+    tts_model: str = "qwen-audio-3.1-tts-flash"
+    tts_voice: str = "longanhuan_v3.1"
+    sfx_provider: Literal["elevenlabs", "aliyun"] = "elevenlabs"
+    sfx_model: str = "qwen-audio-3.1-tts-next"
+    dashscope_api_key: SecretStr | None = Field(
+        default=None, validation_alias=_alias("DASHSCOPE_API_KEY")
+    )
+    aliyun_api_host: str | None = Field(default=None, validation_alias=_alias("ALIYUN_API_HOST"))
+    aliyun_openai_base_url: str | None = Field(
+        default=None, validation_alias=_alias("ALIYUN_OPENAI_BASE_URL")
+    )
+    aliyun_dashscope_base_url: str | None = Field(
+        default=None, validation_alias=_alias("ALIYUN_DASHSCOPE_BASE_URL")
+    )
     elevenlabs_api_key: SecretStr | None = Field(
         default=None, validation_alias=_alias("ELEVENLABS_API_KEY")
     )
@@ -227,6 +243,10 @@ class Settings(BaseSettings):
         "langsmith_api_key",
         "langsmith_gateway_api_key",
         "elevenlabs_api_key",
+        "dashscope_api_key",
+        "aliyun_api_host",
+        "aliyun_openai_base_url",
+        "aliyun_dashscope_base_url",
         "groq_api_key",
         "exa_api_key",
         "paper_bridge_token",

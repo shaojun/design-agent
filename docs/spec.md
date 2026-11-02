@@ -221,6 +221,15 @@ and `DESIGN_AGENT_MODEL_API_KEY_ENV` support compatible endpoints. The LangSmith
 optional preset (`langsmith:provider/model`), never required. Anthropic and OpenAI provider packages
 are core dependencies (MDA installs core only); others are extras.
 
+Compatible endpoints include exact registry entries for DeepSeek Flash and Model Studio Qwen3 VL
+Plus/Flash. They require an explicit base URL and named host credential. The CLI preflight checks
+that credential rather than the protocol provider's key. Inherited roles share the endpoint; a
+different role model id needs its own routing support. DeepSeek's Chat Completions adapter enables
+thinking by default at `high` effort (`look`: `low`), preserves reasoning metadata from regular and
+streaming responses, and replays it across tool calls, checkpoints and helper recovery. Old
+non-thinking history is preserved with empty reasoning fields. Effort maps to DeepSeek's
+`reasoning_effort` levels; `xhigh` maps to `high`. See [Models](models.md).
+
 Roles, each independently configurable and defaulting to the lead model:
 
 | Role | Setting | Default | Notes |
@@ -548,15 +557,32 @@ PR-to-video, music-driven edits) uses the corresponding HyperFrames skills.
 
 ### 9.5 Audio
 
-Host tools: `generate_voiceover` (ElevenLabs, word timestamps written beside the audio),
-`generate_sound_effect`, `generate_music` (paid ElevenLabs plans), `transcribe_audio` (local
+Host tools: `generate_voiceover` (ElevenLabs or Alibaba Qwen Audio TTS, selected explicitly with
+`DESIGN_AGENT_TTS_PROVIDER`; word timestamps written beside the audio with provider provenance),
+`generate_sound_effect` (ElevenLabs or Alibaba TTS-Next, selected with `DESIGN_AGENT_SFX_PROVIDER`),
+`generate_music` (paid ElevenLabs plans), `transcribe_audio` (local
 `hyperframes transcribe` by default, optional Groq). A synthesized cue library covers UI sounds without
 keys. A mixer masters to −14 LUFS / −1 dBTP. Films with voiceover are cut to the voiceover, not the
 music. Bring-your-own music files are supported; no stock-music provider in v0.1.
+Alibaba effects use a non-streaming audio-generation request with no-speech/no-music direction.
+Duration is a prompt target, not a guarantee; loop and prompt-influence controls are rejected before
+any paid call. Files carry provider/usage metadata and use `source: "aliyun"` in the mixer ledger.
+Local synthesized cues remain independent of provider configuration. Availability of voice, music
+and effects must be reported separately, with no silent provider fallback.
+The Alibaba effect tool description exposes the host's no-speech/no-music instruction; musical
+stings and scores must use a separate source. Optional spectrogram inspection uses a fixed
+FFT-friendly height, a maximum 30-second input window and a 10-second process timeout. It is a
+simple onset/ending/pause timing diagnostic, not a listening or sound-quality check, and failure
+must not block mixing. Deliver previews for human audition; explicit human confirmation is required
+before using the sound in production. Do not repeatedly score or regenerate effects from spectrograms.
 
 ### 9.6 Image generation
 
-Host tool `generate_image` (OpenAI direct by default; gateway optional). The model id and parameters
+Host tool `generate_image` (OpenAI by default, or Alibaba Qwen Image with
+`DESIGN_AGENT_IMAGE_PROVIDER=aliyun`). Alibaba media uses a host-only `DASHSCOPE_API_KEY` and separate
+workspace-specific OpenAI-compatible (images) and DashScope (TTS) base URLs; it does not use the
+chat model's endpoint or credential. No provider fallback occurs on failure. Alibaba images use PNG
+and provider-default quality; unsupported OpenAI-specific extension fields are rejected. The model id and parameters
 pass through to the provider; do not allowlist sizes, qualities or models in code (validate with the
 API). Report whether a transparent cut-out actually has alpha. Anything with the logo or exact copy is
 built in HTML on brand, not left to the image model. Background removal via HyperFrames.
