@@ -57,6 +57,9 @@ for a rendered file, extract key frames with ffmpeg or `film-breakdown/scripts/g
 Tile them with `review-thumb.mjs --sheet` and look at the title and end cards too. A strip through
 each transition shows broken handoffs that a sparse strip hides.
 
+If the configured model rejects image input, report that visual review is blocked. A successful
+text response does not establish vision support; never describe an unseen render as reviewed.
+
 ## What to look for
 
 Defects that a gate passes and a person notices at once:

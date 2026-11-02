@@ -285,6 +285,41 @@ def test_master_lands_a_three_second_tone_on_target(sandbox: Sandbox) -> None:
     assert true_peak <= -1, true_peak
 
 
+def test_spectrogram_is_bounded_and_finishes_quickly(sandbox: Sandbox, tmp_path: Path) -> None:
+    run = sandbox(
+        "ffmpeg -nostdin -v error -f lavfi -i sine=frequency=440:duration=3 -y tone.wav\n"
+        "node skills/sound/scripts/spectrogram.mjs tone.wav spectrum.png 0.5 1 || exit $?\n",
+        timeout=30,
+    )
+    assert run.returncode == 0, run.stderr
+    report = _json_line(run.stdout)
+    assert report["ok"] is True
+    assert report["start_s"] == 0.5
+    assert report["window_s"] == 1
+    with Image.open(tmp_path / "spectrum.png") as picture:
+        assert picture.format == "PNG"
+        assert picture.width >= 1024 and picture.height >= 256
+        assert any(low < high for low, high in picture.convert("RGB").getextrema())
+
+
+def test_spectrogram_timeout_preserves_existing_output(sandbox: Sandbox, tmp_path: Path) -> None:
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    ffmpeg = fake_bin / "ffmpeg"
+    ffmpeg.write_text("#!/usr/bin/env node\nsetTimeout(() => {}, 60000);\n")
+    ffmpeg.chmod(0o755)
+    output = tmp_path / "spectrum.png"
+    output.write_bytes(b"existing output")
+    run = sandbox(
+        "PATH=/workspace/fake-bin:$PATH node skills/sound/scripts/spectrogram.mjs tone.wav spectrum.png\n",
+        timeout=30,
+    )
+    assert run.returncode == 1, run.stderr
+    assert "exceeded 10 seconds" in run.stderr
+    assert output.read_bytes() == b"existing output"
+    assert not list(tmp_path.glob("spectrum.png.*.png"))
+
+
 def test_score_pipeline_mixes_masters_and_passes_audio_lint(
     sandbox: Sandbox, tmp_path: Path
 ) -> None:
