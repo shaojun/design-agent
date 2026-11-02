@@ -65,7 +65,10 @@ effort uses DeepSeek's `reasoning_effort` parameter and documented level mapping
 Every model call's usage is priced from `config/prices.toml` (dated, sourced list prices) and summed
 per job, per helper and per role (`harness/meter.py`). Figures are estimates. With
 `DESIGN_AGENT_JOB_BUDGET_USD` set, the lead is told once, when a job's spend reaches it, to ask the
-person before starting more work; nothing is stopped in code.
+person before starting more work; nothing is stopped in code. Unknown prices remain visible in
+`unpriced_calls`, CLI summaries and Slack footers; a configured budget also tells the lead once
+that spend is incomplete. These are model-only estimates: media and sandbox charges are excluded.
+DeepSeek peak rates and Qwen regional estimates are documented in [Models](../models.md).
 
 ## Failure boundaries
 

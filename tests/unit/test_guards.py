@@ -256,3 +256,28 @@ async def test_the_job_budget_is_told_once_when_spend_reaches_it(
     )
     state.update(update)
     assert await middleware.abefore_model(state, SimpleNamespace()) is None  # type: ignore[arg-type]
+
+
+async def test_unpriced_model_warns_once_without_consuming_the_budget_threshold_notice(
+    monkeypatch,
+) -> None:
+    from design_agent.harness import events as ev
+    from design_agent.middleware import budget
+
+    thread = "unpriced-budget-test"
+    monkeypatch.setattr(budget, "_thread_id", lambda: thread)
+    budget.METER.record(ev.Event(ev.USAGE, thread, "lead", data={"priced": False, "usd": 0}))
+    spend = [0.0]
+    middleware = budget.JobBudgetMiddleware(5, spent=lambda _: spend[0])
+    state = {"messages": []}
+    try:
+        update = await middleware.abefore_model(state, SimpleNamespace())
+        assert update is not None and "incomplete" in update["messages"][0].content
+        assert "budget_noted" not in update
+        state.update(update)
+        assert await middleware.abefore_model(state, SimpleNamespace()) is None
+        spend[0] = 6
+        update = await middleware.abefore_model(state, SimpleNamespace())
+        assert update is not None and "ask whether to continue" in update["messages"][0].content
+    finally:
+        budget.METER.forget(thread)

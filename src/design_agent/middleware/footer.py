@@ -68,6 +68,7 @@ def footer_line(
     progress: str = "",
     agents: int = 0,
     minutes: int = 0,
+    unpriced_calls: int = 0,
 ) -> str:
     """The footer in Slack markup: `live` while the job runs, `done` once it has, `snapshot` for
     an older footer a newer reply took over. `usd` is the job's estimated cost so far."""
@@ -87,6 +88,8 @@ def footer_line(
         parts += [f"{max(minutes, 1)} min", f"~{_usd(usd)} total"]
     else:
         parts.append(f"~{_usd(usd)} so far")
+    if unpriced_calls:
+        parts.append(f"cost incomplete ({_count(unpriced_calls, 'unpriced model call')})")
     return " • ".join(parts)
 
 
@@ -147,6 +150,7 @@ class _Job:
     #: When the job began, and what the thread had cost by then.
     started: float | None = None
     usd_base: float = 0.0
+    unpriced_base: int = 0
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
@@ -171,10 +175,13 @@ class Footers:
         usd_at_start: float,
         ended: float,
         store: Any = None,
+        unpriced_at_start: int = 0,
     ) -> None:
         """Post the footer under the reply this run is about to get, and keep it live."""
         task = asyncio.get_running_loop().create_task(
-            self._after_run(thread_id, binding, root, started, usd_at_start, ended, store),
+            self._after_run(
+                thread_id, binding, root, started, usd_at_start, ended, store, unpriced_at_start
+            ),
             name=f"footer {thread_id}",
         )
         self._pending.add(task)
@@ -202,6 +209,7 @@ class Footers:
         usd_at_start: float,
         ended: float,
         store: Any,
+        unpriced_at_start: int,
     ) -> None:
         client, target = binding.client, binding.target
         job = self._jobs.get(thread_id) or await _adopt(store, thread_id, client)
@@ -219,6 +227,7 @@ class Footers:
                 await self._retire(thread_id, job)
                 if busy(thread_id) and job.started is None:
                     job.started, job.usd_base = started, usd_at_start
+                    job.unpriced_base = unpriced_at_start
                 if job.started is None:
                     return  # the job settled while the reply was on its way
                 # Never the totals straight away: more news may be on its way, and the job's
@@ -257,6 +266,7 @@ class Footers:
             trace,
             state,
             usd=METER.summary(thread_id).usd - job.usd_base,
+            unpriced_calls=METER.summary(thread_id).unpriced_calls - job.unpriced_base,
             running=len(tasks.running(thread_id)),
             progress=watch_progress(thread_id),
             agents=len(agents),
@@ -275,7 +285,17 @@ class Footers:
         if footer is None or not footer.live:
             return
         usd = METER.summary(thread_id).usd - job.usd_base
-        await self._draw(thread_id, job, footer, footer_line(footer.trace, "snapshot", usd=usd))
+        await self._draw(
+            thread_id,
+            job,
+            footer,
+            footer_line(
+                footer.trace,
+                "snapshot",
+                usd=usd,
+                unpriced_calls=METER.summary(thread_id).unpriced_calls - job.unpriced_base,
+            ),
+        )
         footer.live = False
 
     async def _follow(self, thread_id: str, job: _Job) -> None:
@@ -371,6 +391,7 @@ async def _save(thread_id: str, job: _Job) -> None:
         }
         if footer is not None
         else None,
+        "unpriced_calls": METER.summary(thread_id).unpriced_calls - job.unpriced_base,
         "at": time.time(),
     }
     try:
@@ -399,6 +420,7 @@ async def _adopt(store: Any, thread_id: str, client: SlackClient) -> _Job | None
     # This process met the thread after the one that saved it, so all it has metered for the
     # thread comes on top of what the job had cost when it was saved.
     job = _Job(client, store, started=float(started), usd_base=-float(value.get("usd") or 0.0))
+    job.unpriced_base = -int(value.get("unpriced_calls") or 0)
     saved = value.get("footer")
     if isinstance(saved, Mapping) and saved.get("ts"):
         job.footer = _Footer(
@@ -423,7 +445,7 @@ class ReplyFooterMiddleware(AgentMiddleware[AgentState[Any], Any, Any]):
         self._surface = surface
         self.footers = footers or Footers()
         #: Per thread: when the run began, and what the thread had cost by then.
-        self._runs: dict[str, tuple[float, float]] = {}
+        self._runs: dict[str, tuple[float, float, int]] = {}
 
     @property
     def name(self) -> str:
@@ -432,7 +454,8 @@ class ReplyFooterMiddleware(AgentMiddleware[AgentState[Any], Any, Any]):
     async def abefore_agent(self, state: AgentState[Any], runtime: Any) -> dict[str, Any] | None:  # noqa: ARG002 - hook signature
         thread_id = thread_of(runtime)
         if thread_id:
-            self._runs[thread_id] = (time.time(), METER.summary(thread_id).usd)
+            summary = METER.summary(thread_id)
+            self._runs[thread_id] = (time.time(), summary.usd, summary.unpriced_calls)
         return None
 
     async def aafter_agent(self, state: AgentState[Any], runtime: Any) -> dict[str, Any] | None:
@@ -446,13 +469,14 @@ class ReplyFooterMiddleware(AgentMiddleware[AgentState[Any], Any, Any]):
         binding = await self._surface.bind(runtime)
         if binding is None:
             return None
-        started, usd = began
+        started, usd, unpriced = began
         self.footers.after_run(
             thread_id,
             binding,
             root=current_root(),
             started=started,
             usd_at_start=usd,
+            unpriced_at_start=unpriced,
             ended=time.time(),
             store=getattr(runtime, "store", None),
         )

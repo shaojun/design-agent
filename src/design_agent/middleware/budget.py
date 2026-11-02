@@ -23,6 +23,7 @@ from design_agent.middleware.meter import METER
 
 class BudgetState(AgentState[Any]):
     budget_noted: NotRequired[Annotated[bool, PrivateStateAttr]]
+    budget_unpriced_noted: NotRequired[Annotated[bool, PrivateStateAttr]]
 
 
 def _thread_id() -> str:
@@ -47,15 +48,30 @@ class JobBudgetMiddleware(AgentMiddleware[BudgetState, Any, Any]):
         state: BudgetState,
         runtime: Runtime[Any],  # noqa: ARG002 - hook signature
     ) -> dict[str, Any] | None:
-        if state.get("budget_noted"):
-            return None
         thread = _thread_id()
+        unpriced = METER.summary(thread).unpriced_calls if thread else 0
+        update: dict[str, Any] = {}
+        messages: list[HumanMessage] = []
+        if unpriced and not state.get("budget_unpriced_noted"):
+            messages.append(
+                HumanMessage(
+                    "[Budget] Some model calls have no configured price. The recorded dollar spend "
+                    "is incomplete, so it cannot establish that this job is within budget. Tell the "
+                    "person about the missing costs. Media charges are excluded from this model budget."
+                )
+            )
+            update["budget_unpriced_noted"] = True
         spent = self._spent(thread) if thread else 0.0
-        if spent < self._budget:
-            return None
-        note = (
-            f"[Budget] This job's model spend is about ${spent:.2f} (an estimate), past its "
-            f"${self._budget:.2f} budget. Before starting more work, tell the person what is done "
-            "and what is left, and ask whether to continue."
-        )
-        return {"budget_noted": True, "messages": [HumanMessage(note)]}
+        if spent >= self._budget and not state.get("budget_noted"):
+            messages.append(
+                HumanMessage(
+                    f"[Budget] This job's model spend is about ${spent:.2f} (an estimate), past its "
+                    f"${self._budget:.2f} budget. Before starting more work, tell the person what is done "
+                    "and what is left, and ask whether to continue."
+                )
+            )
+            update["budget_noted"] = True
+        if messages:
+            update["messages"] = messages
+            return update
+        return None

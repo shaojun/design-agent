@@ -75,7 +75,13 @@ def _spend(usd: float) -> None:
 
 
 async def _run_ends(
-    fake: FakeSlack, footers: Footers, started: float, *, store: Any = None, replied: bool = True
+    fake: FakeSlack,
+    footers: Footers,
+    started: float,
+    *,
+    store: Any = None,
+    replied: bool = True,
+    unpriced_at_start: int = 0,
 ) -> None:
     ended = time.time()
     if replied:  # the platform posts the run's reply into the thread
@@ -86,6 +92,7 @@ async def _run_ends(
         root=None,
         started=started,
         usd_at_start=0.0,
+        unpriced_at_start=unpriced_at_start,
         ended=ended,
         store=store,
     )
@@ -264,3 +271,46 @@ async def test_only_a_reply_of_the_jobs_own_gets_a_footer() -> None:
     await middleware.abefore_agent({"messages": []}, runtime)
     await middleware.aafter_agent(answered, runtime)
     assert noted.after == [THREAD]
+
+
+def test_zero_priced_spend_does_not_hide_calls_without_a_price() -> None:
+    for state in ("live", "done", "snapshot"):
+        line = footer_line("", state, usd=0, unpriced_calls=2)
+        assert "cost incomplete" in line and "2 unpriced model calls" in line
+
+
+async def test_unpriced_footer_notice_survives_a_restart() -> None:
+    thread = "unpriced-footer-restart"
+    fake = FakeSlack()
+    client = binding(fake).client
+    store = InMemoryStore()
+    job = footer._Job(client, store, started=time.time())
+    try:
+        METER.record(ev.Event(ev.USAGE, thread, "lead", data={"priced": False, "usd": 0}))
+        await footer._save(thread, job)
+        METER.forget(thread)
+        adopted = await footer._adopt(store, thread, client)
+        assert adopted is not None and adopted.unpriced_base == -1
+        assert "cost incomplete" in Footers()._line(thread, adopted, "", "done")
+    finally:
+        METER.forget(thread)
+
+
+async def test_prior_jobs_unpriced_calls_do_not_taint_a_new_jobs_footer(fast: None) -> None:
+    fake, footers = FakeSlack(), Footers()
+    store = InMemoryStore()
+    METER.record(ev.Event(ev.USAGE, THREAD, "lead", data={"priced": False, "usd": 0}))
+    started = time.time()
+    _helper(started)
+    try:
+        await _run_ends(fake, footers, started, store=store, unpriced_at_start=1)
+        assert _posts(fake) and "cost incomplete" not in _posts(fake)[-1]
+        METER.record(ev.Event(ev.USAGE, THREAD, "lead", data={"priced": False, "usd": 0}))
+        job = footers._jobs[THREAD]
+        assert "1 unpriced model call" in footers._line(THREAD, job, "", "done")
+        await footer._save(THREAD, job)
+        METER.forget(THREAD)
+        adopted = await footer._adopt(store, THREAD, binding(fake).client)
+        assert adopted is not None and adopted.unpriced_base == -1
+    finally:
+        await footers.aclose()

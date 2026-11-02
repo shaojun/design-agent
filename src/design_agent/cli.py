@@ -153,7 +153,12 @@ async def _ask(
             if spent.calls:
                 click.echo(
                     f"cost: about ${spent.usd:.2f} at list prices ({spent.calls} model calls, "
-                    f"{spent.hit_ratio:.0%} of input read from cache)",
+                    f"{spent.hit_ratio:.0%} of input read from cache; media charges excluded)"
+                    + (
+                        f"; cost incomplete: {spent.unpriced_calls} model calls unpriced"
+                        if spent.unpriced_calls
+                        else ""
+                    ),
                     err=True,
                 )
         folder = runtime.out_dir / thread
