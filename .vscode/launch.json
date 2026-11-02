@@ -16,8 +16,7 @@
             },
             "console": "integratedTerminal",
             "justMyCode": true,
-            "subProcess": false,
-            "preLaunchTask": "Design Agent: stop background Slack"
+            "subProcess": false
         }
     ]
 }

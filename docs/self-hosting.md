@@ -78,3 +78,15 @@ thread's sandbox under `/workspace/attachments/`; finals are uploaded to the thr
 `uv sync --extra self-host --extra slack`, set `DATABASE_URL` (or leave it unset for SQLite files
 in `workspace/state/`), build the sandbox image (`uv run design-agent sandbox build`), then run
 `uv run design-agent serve` and, for Slack, `uv run design-agent slack`.
+
+## Local Slack development
+
+`uv run design-agent slack` runs the Slack process in the foreground. Socket Mode holds its
+connection to Slack directly; systemd is optional process supervision, not a Slack dependency.
+Stop it with Ctrl-C. In VS Code, **Design Agent: Slack** launches the same CLI under the debugger
+without a service or `systemctl`; see [.vscode/README.md](../.vscode/README.md).
+
+F5 starts the debug process and Shift+F5 stops it; the checked-in VS Code configuration does not
+install, stop or start a systemd service. Keep one consumer for each Slack App during development;
+a separate development Slack App and working directory avoid interfering with a continuously
+running team agent.
