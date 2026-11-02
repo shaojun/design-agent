@@ -1,0 +1,16 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Design Agent: stop background Slack",
+            "type": "process",
+            "command": "systemctl",
+            "args": ["--user", "stop", "design-agent-slack.service"],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "silent",
+                "panel": "dedicated"
+            }
+        }
+    ]
+}

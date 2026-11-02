@@ -1,0 +1,23 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Design Agent: Slack",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "program": "${workspaceFolder}/.venv/bin/design-agent",
+            "args": ["slack"],
+            "cwd": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "subProcess": false,
+            "preLaunchTask": "Design Agent: stop background Slack"
+        }
+    ]
+}
