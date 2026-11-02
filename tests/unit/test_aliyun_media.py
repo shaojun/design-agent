@@ -12,7 +12,7 @@ import pytest
 from design_agent.config import Settings
 from design_agent.tools import aliyun
 from design_agent.tools.files import WorkspaceError
-from design_agent.tools.media import build_media_tools
+from design_agent.tools.media import build_media_tools, image_route
 from tests.unit.test_host_tools import MemoryBackend, _png
 
 BASE = "https://example.cn-beijing.maas.aliyuncs.com"
@@ -30,6 +30,20 @@ def settings(**kwargs: Any) -> Settings:
         aliyun_dashscope_base_url=BASE + "/api/v1",
         **kwargs,
     )
+
+
+@pytest.mark.parametrize("has_key", [True, False])
+def test_explicit_aliyun_image_route_never_uses_openai_or_gateway_key(has_key: bool) -> None:
+    selected = settings(openai_api_key="openai-only", langsmith_gateway_api_key="gateway-only")
+    if not has_key:
+        selected.dashscope_api_key = None
+    route = image_route(selected)
+    if has_key:
+        assert route is not None
+        assert route.url == BASE + "/compatible-mode/v1/images/generations"
+        assert route.key == KEY and route.via == "Alibaba"
+    else:
+        assert route is None
 
 
 def test_aliyun_effect_description_exposes_host_prompt_restrictions() -> None:

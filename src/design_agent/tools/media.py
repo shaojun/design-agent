@@ -24,6 +24,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import JsonValue
 
 from design_agent.config import Settings
+from design_agent.models.factory import GATEWAY_NATIVE_ROUTES, GATEWAY_ORIGIN, gateway_key
 from design_agent.tools import aliyun
 from design_agent.tools.files import (
     BackendFor,
@@ -42,23 +43,59 @@ VOICE_ID = re.compile(r"[A-Za-z0-9]{10,40}")
 
 
 @dataclass(frozen=True)
+class ImageRoute:
+    """Where image generation goes, with the key for it and a name for messages."""
+
+    url: str
+    key: str
+    via: str
+
+
+def _secret(secret: Any) -> str | None:
+    return (secret.get_secret_value() or None) if secret is not None else None
+
+
+def image_route(settings: Settings) -> ImageRoute | None:
+    """Explicit Alibaba selection, otherwise OpenAI directly or through the LangSmith Gateway.
+
+    The gateway route uses its workspace's OpenAI key when this deployment uses the gateway.
+    """
+    if settings.image_provider == "aliyun":
+        if key := _secret(settings.dashscope_api_key):
+            return ImageRoute(
+                (settings.aliyun_openai_base_url or "").rstrip("/") + "/images/generations",
+                key,
+                "Alibaba",
+            )
+        return None
+    if openai := _secret(settings.openai_api_key):
+        return ImageRoute(f"{OPENAI_BASE_URL}/images/generations", openai, "OpenAI")
+    uses_gateway = bool(_secret(settings.langsmith_gateway_api_key))
+    try:
+        uses_gateway = uses_gateway or settings.lead_model().via_gateway
+    except ValueError:
+        pass
+    if uses_gateway and (key := gateway_key(settings)):
+        url = f"{GATEWAY_ORIGIN}{GATEWAY_NATIVE_ROUTES['openai']}/images/generations"
+        return ImageRoute(url, key, "the LangSmith Gateway")
+    return None
+
+
+@dataclass(frozen=True)
 class MediaKeys:
     """Provider credentials, held only by host tools."""
 
-    openai: str | None
+    image: ImageRoute | None
     elevenlabs: str | None
     groq: str | None
     image_model: str
 
     @classmethod
     def from_settings(cls, settings: Settings) -> MediaKeys:
-        def value(secret: Any) -> str | None:
-            return secret.get_secret_value() if secret is not None else None
-
         return cls(
-            openai=value(settings.openai_api_key),
-            elevenlabs=value(settings.elevenlabs_api_key),
-            groq=value(settings.groq_api_key),
+            image=image_route(settings),
+            elevenlabs=_secret(settings.elevenlabs_api_key),
+            groq=_secret(settings.groq_api_key),
             image_model=settings.image_model,
         )
 
@@ -667,25 +704,21 @@ def build_media_tools(settings: Settings, backend_for: BackendFor) -> list[BaseT
             path = workspace_path(sandbox_path)
             backend = require_backend(backend_for, runtime)
             is_aliyun = settings.image_provider == "aliyun"
-            key = (
-                (
-                    settings.dashscope_api_key.get_secret_value()
-                    if settings.dashscope_api_key
-                    else None
+            route = keys.image
+            if route is None:
+                if is_aliyun:
+                    return "image generation unavailable: no DASHSCOPE_API_KEY configured."
+                return (
+                    "image generation unavailable: no OPENAI_API_KEY, and this deployment does not "
+                    "use the LangSmith Gateway."
                 )
-                if is_aliyun
-                else keys.openai
-            )
-            provider = "Alibaba" if is_aliyun else "OpenAI"
-            if not key:
-                name = "DASHSCOPE_API_KEY" if is_aliyun else "OPENAI_API_KEY"
-                return f"image generation unavailable: no {name} configured."
             if is_aliyun and (
                 output_format not in (None, "png") or not path.lower().endswith(".png")
             ):
                 return "rejected: Qwen Image writes PNG; use a .png path and omit output_format."
             if is_aliyun and background not in (None, "auto", "opaque", "transparent"):
                 return "rejected: background must be auto, opaque or transparent."
+
             body: dict[str, JsonValue] = {
                 "model": model or keys.image_model,
                 "prompt": prompt,
@@ -708,21 +741,25 @@ def build_media_tools(settings: Settings, backend_for: BackendFor) -> list[BaseT
                     str(body["prompt"])
                     + " Output an isolated object on actual fully transparent alpha; no backdrop."
                 )
-            url = (
+            if is_aliyun:
                 aliyun.endpoint(settings.aliyun_openai_base_url, "/images/generations")
-                if is_aliyun
-                else f"{OPENAI_BASE_URL}/images/generations"
-            )
             async with httpx.AsyncClient(timeout=240, follow_redirects=False) as client:
                 response = await client.post(
-                    url,
-                    headers={"Authorization": f"Bearer {key}"},
-                    json=body,
+                    route.url, headers={"Authorization": f"Bearer {route.key}"}, json=body
                 )
             if response.status_code != 200:
                 if is_aliyun:
                     return aliyun.failure(response.status_code)
-                return f"image generation failed: OpenAI HTTP {response.status_code}{_reason(response)}"
+                hint = (
+                    " (the gateway's workspace has no OpenAI key; add one there or set "
+                    "OPENAI_API_KEY)"
+                    if response.status_code == 424
+                    else ""
+                )
+                return (
+                    f"image generation failed: {route.via} HTTP {response.status_code}"
+                    f"{_reason(response)}{hint}"
+                )
             items = response.json().get("data") or []
             written: list[str] = []
             reports: list[str] = []
@@ -736,7 +773,7 @@ def build_media_tools(settings: Settings, backend_for: BackendFor) -> list[BaseT
                     data = await _download(
                         aliyun.asset_url(item["url"]) if is_aliyun else item["url"],
                         cap_mb=_IMAGE_GEN_CAP_MB,
-                        provider=f"{provider} image",
+                        provider=f"{route.via} image",
                     )
                 else:
                     continue
