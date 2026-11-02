@@ -52,6 +52,8 @@ def _no_ambient_keys(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureReq
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
         "GOOGLE_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "DASHSCOPE_API_KEY",
         "ELEVENLABS_API_KEY",
         "LANGSMITH_API_KEY",
     ):

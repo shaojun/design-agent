@@ -41,6 +41,13 @@ Selection is not authorization: approval and policy act on a call's name, deferr
 
 ## Cache discipline
 
+DeepSeek Chat Completions uses `DeepSeekChatOpenAI` to retain the provider's `reasoning_content`
+in message `additional_kwargs` and replay it on historical assistant messages. This includes
+streaming deltas, tool-call messages and final answers. Checkpoints and durable helper transcripts
+keep the field; it is not user-facing answer text. Old non-thinking turns and synthetic messages
+send an empty field without changing their content or tool calls. Thinking is enabled by default;
+effort uses DeepSeek's `reasoning_effort` parameter and documented level mapping.
+
 - Stable prefix: the system prompt does not change while work runs. The date and anything that
   happened in the background arrive as messages, written once into history.
 - deepagents installs Anthropic prompt caching with a five-minute TTL on every agent. The lead's

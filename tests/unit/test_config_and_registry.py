@@ -128,8 +128,70 @@ def test_base_url_requires_a_named_key(monkeypatch: pytest.MonkeyPatch) -> None:
     assert build_chat_model(s, "lead").openai_api_base == "https://llm.example/v1"  # type: ignore[attr-defined]
 
 
+@pytest.mark.parametrize("model", ["deepseek-flash", "qwen3-vl-plus", "qwen3-vl-flash"])
+def test_compatible_vision_models_use_the_endpoint_for_every_inherited_role(
+    model: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("COMPATIBLE_API_KEY", "endpoint-secret")
+    s = settings(
+        model=f"openai:{model}",
+        model_base_url="https://provider.example/v1",
+        model_api_key_env="COMPATIBLE_API_KEY",
+    )
+    for role in ("lead", "helper", "look", "tool_selector", "learning"):
+        resolved = resolve_model(s, role)  # type: ignore[arg-type]
+        assert resolved.caps.vision and resolved.caps.tool_calling
+        assert resolved.caps.disclosure is ToolDisclosure.PORTABLE_SELECTOR
+        built = build_chat_model(s, role)  # type: ignore[arg-type]
+        assert built.openai_api_base == s.model_base_url  # type: ignore[attr-defined]
+        assert built.openai_api_key.get_secret_value() == "endpoint-secret"  # type: ignore[attr-defined]
+        assert built.use_responses_api is False  # type: ignore[attr-defined]
+        if model == "deepseek-flash":
+            assert built.extra_body == {"thinking": {"type": "enabled"}}  # type: ignore[attr-defined]
+
+
+def test_compatible_models_require_an_explicit_endpoint() -> None:
+    with pytest.raises(ModelConfigurationError, match="BASE_URL"):
+        resolve_model(settings(model="openai:deepseek-flash"))
+
+
+def test_custom_endpoint_never_falls_back_to_the_openai_key(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COMPATIBLE_API_KEY", raising=False)
+    s = settings(
+        model="openai:deepseek-flash",
+        model_base_url="https://provider.example/v1",
+        model_api_key_env="COMPATIBLE_API_KEY",
+        openai_api_key="must-not-leak",
+    )
+    with pytest.raises(ModelConfigurationError, match="MODEL_API_KEY_ENV"):
+        build_chat_model(s)
+
+
+def test_custom_endpoint_doctor_checks_its_key_in_the_project_env(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:  # type: ignore[no-untyped-def]
+    from design_agent.doctor import missing_model_key
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COMPATIBLE_API_KEY", raising=False)
+    s = settings(
+        model="openai:deepseek-flash",
+        model_base_url="https://provider.example/v1",
+        model_api_key_env="COMPATIBLE_API_KEY",
+    )
+    assert missing_model_key(s) == "COMPATIBLE_API_KEY"
+    (tmp_path / ".env").write_text("COMPATIBLE_API_KEY=private-value\n")
+    assert missing_model_key(s) is None
+
+
 @pytest.mark.parametrize(
-    "model_id", sorted(k for k in CAPABILITY_REGISTRY if k.startswith(("anthropic:", "openai:")))
+    "model_id",
+    sorted(
+        k for k, caps in CAPABILITY_REGISTRY.items() if caps.provider in {"anthropic", "openai"}
+    ),
 )
 def test_registry_agrees_with_installed_provider_profiles(model_id: str) -> None:
     provider, model = model_id.split(":", 1)

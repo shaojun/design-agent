@@ -38,6 +38,8 @@ async def test_the_configured_model_answers() -> None:
         "openai": "OPENAI_API_KEY",
         "google_genai": "GOOGLE_API_KEY",
     }.get(settings.lead_model().upstream.provider)
+    if settings.model_base_url and not settings.lead_model().via_gateway:
+        key = settings.model_api_key_env
     if key:
         needs(key)
     model = (

@@ -110,6 +110,28 @@ CAPABILITY_REGISTRY: dict[str, ModelCapabilities] = {
     "openai:gpt-6.1-sol": _openai("medium"),
     "openai:gpt-6-sol": _openai("medium"),
     "openai:gpt-5.6-sol": _openai("medium"),
+    "openai:deepseek-flash": ModelCapabilities(
+        provider="deepseek",
+        vision=True,
+        efforts=frozenset({"minimal", "low", "medium", "high", "xhigh", "max", "ultra"}),
+        default_effort="high",
+        context_window=1_048_576,
+        max_output_tokens=393_216,
+        integration_package="langchain-openai",
+        verified=True,
+        extra={"extra_body": {"thinking": {"type": "enabled"}}},
+        notes="DeepSeek V4.1 Flash; reasoning replay adapter; explicit endpoint required.",
+    ),
+    **{
+        f"openai:{name}": ModelCapabilities(
+            provider="dashscope",
+            vision=True,
+            integration_package="langchain-openai",
+            verified=True,
+            notes="Qwen3 VL vision and function calling per Model Studio docs; endpoint required.",
+        )
+        for name in ("qwen3-vl-plus", "qwen3-vl-flash")
+    },
     "google_genai:gemini-3.6-flash": ModelCapabilities(
         provider="google_genai",
         vision=True,

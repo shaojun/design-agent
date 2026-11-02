@@ -54,6 +54,10 @@ def resolve_model(
     spec = settings.lead_model() if role == "lead" else settings.role_model(role)
     base_url = settings.model_base_url if spec == settings.lead_model() else None
     caps = capabilities_for(spec, base_url=base_url)
+    if caps.provider in {"deepseek", "dashscope"} and base_url is None:
+        raise ModelConfigurationError(
+            f"{spec} needs DESIGN_AGENT_MODEL_BASE_URL for its compatible endpoint"
+        )
     if role in VISION_ROLES and spec.provider != "scripted":
         require_vision(spec, caps, role=role)
     requested = effort
@@ -93,7 +97,7 @@ def build_chat_model(
     }
     if resolved.base_url is not None:
         kwargs["base_url"] = resolved.base_url
-        key = _named_key(settings.model_api_key_env, project_root)
+        key = named_key(settings.model_api_key_env, project_root)
         if key is None:
             raise ModelConfigurationError(
                 "DESIGN_AGENT_MODEL_BASE_URL needs DESIGN_AGENT_MODEL_API_KEY_ENV naming the "
@@ -166,9 +170,21 @@ def _anthropic(
 def _openai(settings: Settings, resolved: ResolvedModel, kwargs: dict[str, Any]) -> BaseChatModel:
     from langchain_openai import ChatOpenAI
 
+    for name, value in resolved.caps.extra.items():
+        kwargs.setdefault(name, value)
     if settings.openai_api_key is not None:
         kwargs.setdefault("api_key", settings.openai_api_key.get_secret_value())
     kwargs.setdefault("use_responses_api", resolved.caps.responses_api)
+    if resolved.caps.provider == "deepseek":
+        from design_agent.models.deepseek import DeepSeekChatOpenAI
+
+        # DeepSeek uses Chat Completions' reasoning_effort, not Responses' reasoning object.
+        effort = resolved.effort or "high"
+        mapped = {"minimal": "low", "medium": "high", "xhigh": "high", "ultra": "max"}
+        kwargs.setdefault("reasoning_effort", mapped.get(effort, effort))
+        if resolved.max_output_tokens is not None:
+            kwargs.setdefault("max_completion_tokens", resolved.max_output_tokens)
+        return DeepSeekChatOpenAI(model=resolved.spec.model, **kwargs)
     if resolved.effort is not None:
         kwargs.setdefault("reasoning", {"effort": resolved.effort})
     if resolved.max_output_tokens is not None:
@@ -184,7 +200,7 @@ def _gateway_key(settings: Settings) -> str:
     return ""
 
 
-def _named_key(env_name: str | None, project_root: Path | None) -> str | None:
+def named_key(env_name: str | None, project_root: Path | None = None) -> str | None:
     """The value of the variable `env_name` from the process or the project `.env`."""
     if not env_name:
         return None

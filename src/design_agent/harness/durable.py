@@ -16,6 +16,7 @@ What is saved is always valid to send back, and small:
   re-opens the ones it still needs; other media it opened likewise;
 - thinking blocks are dropped: a provider may reject replayed thinking once the history before it
   was edited, and accepts the same history with the thinking stripped;
+- DeepSeek's required `reasoning_content` metadata is retained for its tool-call replay contract;
 - a tool call the restart cut off gets a result saying so, and that its effect is unknown;
 - past `max_bytes`, the oldest steps after the brief are dropped, with a marker where they were.
 
@@ -214,7 +215,8 @@ def _key(seq: int) -> str:
 
 def _clean(message: BaseMessage, paths: dict[str, str]) -> BaseMessage | None:
     """`message` as it is saved: thinking dropped, media as a stub naming its file, no tool
-    artifact (the model never saw it). None for a model reply left with nothing to send."""
+    artifact (the model never saw it). DeepSeek reasoning metadata stays intact.
+    None for a model reply left with nothing to send."""
     if isinstance(message, AIMessage):
         for call in message.tool_calls:
             if call.get("id") and (path := _path_of(call.get("args"))):
