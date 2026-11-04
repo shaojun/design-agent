@@ -275,6 +275,76 @@ def test_rich_text_and_mentions_and_unsafe_resources() -> None:
         message_content(payload, "ou_bot")
 
 
+@pytest.mark.parametrize("localized", [False, True])
+async def test_post_file_attachment_reaches_real_graph(tmp_path: Path, localized: bool) -> None:
+    fake = FakeFeishu()
+    payload = event("om_post_file", direct=True)
+    content = {
+        "title": "",
+        "content": [[{"tag": "text", "text": "Use the attached event brief"}]],
+        "content_v2": [[{"tag": "text", "text": "Use the attached event brief"}]],
+        "files": [{"file_key": "file_brief", "file_name": "event-brief.pdf", "is_folder": False}],
+    }
+    payload["event"]["message"]["content"] = json.dumps(
+        {"zh_cn": content} if localized else content
+    )
+    path = "/workspace/attachments/om_post_file-0-event-brief.pdf"
+
+    def respond(messages: Sequence[BaseMessage]) -> AIMessage:
+        assert any(path in str(m.content) for m in messages if m.type == "human")
+        assert (tmp_path / "sb" / path.lstrip("/")).read_bytes() == b"reference"
+        return reply("The event brief is available.")
+
+    adapter = FeishuAdapter(fake.client, "cli_test", "tenant", "ou_bot", store=InMemoryStore())
+    runtime = build_local_runtime(
+        Settings(_env_file=None, workspace_root=tmp_path / "ws"),  # type: ignore[call-arg]
+        ROOT,
+        model=RespondingChatModel(respond=respond),
+        binding=folder_binding(tmp_path / "sb", ROOT),
+        store=adapter.store,
+        surface="feishu",
+    )
+    adapter.runtime = runtime
+    try:
+        await adapter.handle(payload)
+        downloads = [r for r in fake.calls if "/resources/" in r.url.path]
+        assert len(downloads) == 1
+        assert downloads[0].url.path.endswith("/om_post_file/resources/file_brief")
+        assert downloads[0].url.params["type"] == "file"
+        assert any("The event brief is available." in m["content"] for m in fake.sent)
+    finally:
+        await adapter.aclose()
+        await runtime.services.aclose()
+        fake.client.close()
+
+
+def test_post_attachment_limit_includes_images_and_files() -> None:
+    message = event()["event"]["message"]
+    content = json.loads(message["content"])
+    content["files"] = [{"file_key": f"file_{n}", "file_name": f"brief-{n}.pdf"} for n in range(10)]
+    message["content"] = json.dumps(content)
+    with pytest.raises(FeishuError, match="too_many_attachments"):
+        message_content(message, "ou_bot")
+
+
+@pytest.mark.parametrize(
+    "resource,reason",
+    [
+        ({"file_key": "../../secret", "file_name": "brief.pdf"}, "invalid_identifier"),
+        ({"file_name": "brief.pdf"}, "invalid_identifier"),
+        ({"file_key": "file_folder", "is_folder": True}, "unsupported_folder_attachment"),
+        ("invalid", "invalid_message_content"),
+    ],
+)
+def test_post_invalid_attachments_are_not_silently_ignored(resource: Any, reason: str) -> None:
+    message = event()["event"]["message"]
+    content = json.loads(message["content"])
+    content["files"] = [resource]
+    message["content"] = json.dumps(content)
+    with pytest.raises(FeishuError, match=reason):
+        message_content(message, "ou_bot")
+
+
 def test_client_errors_never_echo_secrets_and_download_does_not_follow_redirects() -> None:
     def respond(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/internal"):
@@ -452,4 +522,95 @@ async def test_new_dm_session_survives_restart_and_does_not_wait_for_old_turn() 
         release_old.set()
         await old
         await adapter.aclose()
+        fake.client.close()
+
+
+async def test_pdf_visuals_reach_shared_look_tool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import base64
+    import io
+
+    from PIL import Image
+
+    from design_agent.runtime import pdf
+
+    fake = FakeFeishu()
+    original = fake.respond
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        if "/resources/" in request.url.path:
+            return httpx.Response(200, content=b"%PDF-1.4\nfixture")
+        return original(request)
+
+    client = FeishuClient("cli_test", "test-secret", transport=httpx.MockTransport(respond))
+    picture = io.BytesIO()
+    Image.new("RGB", (32, 24), "blue").save(picture, format="PNG")
+    page = "/workspace/attachments/pdf-test/page-001.png"
+    image = "/workspace/attachments/pdf-test/image-000.png"
+    manifest_path = "/workspace/attachments/pdf-test/pdf-manifest.json"
+
+    def prepare(backend: Any, path: str) -> str:
+        manifest = {"source": path, "pages": [{"path": page}], "images": [{"path": image}]}
+        result = backend.upload_files(
+            [
+                (page, picture.getvalue()),
+                (image, picture.getvalue()),
+                (manifest_path, json.dumps(manifest).encode()),
+            ]
+        )
+        assert all(r.error is None for r in result)
+        return manifest_path
+
+    monkeypatch.setattr(pdf, "prepare_pdf", prepare)
+    seen: list[str] = []
+
+    def lead_pdf(messages: Sequence[BaseMessage]) -> AIMessage:
+        last = messages[-1]
+        if isinstance(last, ToolMessage) and last.name == "read_file":
+            return tool_call(
+                "look", {"paths": [page, image], "question": "Describe the PDF source visuals."}
+            )
+        if isinstance(last, ToolMessage):
+            assert "A blue source image." in str(last.content)
+            return reply("PDF source visuals reviewed.")
+        assert any(
+            manifest_path in str(m.content) and "page previews" in str(m.content)
+            for m in messages
+            if m.type == "human"
+        )
+        return tool_call("read_file", {"file_path": manifest_path})
+
+    def vision(messages: Sequence[BaseMessage]) -> AIMessage:
+        content = messages[-1].content
+        blocks = [b for b in content if isinstance(b, dict) and b.get("type") == "image"]
+        assert len(blocks) == 2
+        assert all(base64.b64decode(b["base64"]) == picture.getvalue() for b in blocks)
+        seen.append("vision_received_images")
+        return reply("A blue source image.")
+
+    adapter = FeishuAdapter(client, "cli_test", "tenant", "ou_bot", store=InMemoryStore())
+    runtime = build_local_runtime(
+        Settings(_env_file=None, workspace_root=tmp_path / "ws"),  # type: ignore[call-arg]
+        ROOT,
+        model=RespondingChatModel(respond=lead_pdf),
+        role_models={"look": RespondingChatModel(respond=vision)},
+        binding=folder_binding(tmp_path / "sb", ROOT),
+        store=adapter.store,
+        surface="feishu",
+    )
+    adapter.runtime = runtime
+    payload = event("om_pdf_visual", direct=True)
+    payload["event"]["message"].update(
+        message_type="file",
+        content=json.dumps({"file_key": "file_brief", "file_name": "brief.pdf"}),
+    )
+    try:
+        await adapter.handle(payload)
+        assert seen == ["vision_received_images"]
+        assert any("PDF source visuals reviewed." in m["content"] for m in fake.sent)
+    finally:
+        await adapter.aclose()
+        await runtime.services.aclose()
+        client.close()
         fake.client.close()

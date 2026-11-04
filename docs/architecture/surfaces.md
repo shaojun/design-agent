@@ -63,7 +63,11 @@ them. Turns and attachment staging serialize per conversation. The store retains
 message ids per conversation for replay deduplication.
 
 Resources are downloaded from fixed Feishu API paths on the host with a size cap, never from a
-URL in user content. `FeishuFileDelivery` sends `upload_files` outputs back to the same chat or
+URL in user content. The shared local attachment runtime preprocesses PDFs inside the sandbox
+before invoking the graph: text, page previews and embedded images are indexed in a manifest
+whose path is supplied to the agent. Visual review uses the same `look` tool as video frames;
+the host does not parse PDF bytes or send every image into the lead's context. Extraction limits
+and warnings are explicit ([Feishu](../feishu.md)). `FeishuFileDelivery` sends `upload_files` outputs back to the same chat or
 topic, with a 30 MiB per-file limit also exposed in the tool schema description. Host progress
 middleware retains each lead tool call in default-collapsed JSON 2.0 cards, with actual result
 status and elapsed time. Updates coalesce at three seconds without dropping steps; groups of 25

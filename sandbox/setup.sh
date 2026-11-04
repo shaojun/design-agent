@@ -274,7 +274,7 @@ install_system() {
   # file tools and the workspace gates shell out to (python3, ripgrep, jq).
   apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
     ca-certificates curl unzip xz-utils procps python3 ripgrep jq woff2 \
-    ffmpeg fontconfig fonts-liberation fonts-noto-color-emoji \
+    ffmpeg fontconfig fonts-liberation fonts-noto-color-emoji poppler-utils \
     libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
     libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 \
     libcairo2 libdbus-1-3 libexpat1 libx11-6 libxcb1 libxext6
@@ -398,6 +398,11 @@ chrome-headless-shell --no-sandbox --disable-gpu --hide-scrollbars --window-size
   --screenshot="$work/page.png" "file://$probe_dir/page.html" >/dev/null 2>&1
 [ "$(head -c 8 "$work/page.png" | od -An -tx1 | tr -d ' \n')" = "89504e470d0a1a0a" ] \
   || { echo "browser screenshot failed" >&2; exit 1; }
+
+chrome-headless-shell --no-sandbox --disable-gpu --no-pdf-header-footer \
+  --print-to-pdf="$work/page.pdf" "file://$probe_dir/page.html" >/dev/null 2>&1
+pdftotext -layout "$work/page.pdf" "$work/page.txt"
+grep -q 'Fraunces' "$work/page.txt" || { echo "PDF text extraction failed" >&2; exit 1; }
 
 mkdir -p "$work/film"
 cp "$probe_dir/composition.html" "$work/film/index.html"

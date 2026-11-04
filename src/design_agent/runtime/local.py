@@ -138,12 +138,20 @@ class LocalRuntime:
         from langchain_core.runnables.config import var_child_runnable_config
 
         placed = [(f"/workspace/attachments/{Path(name).name}", content) for name, content in files]
+        paths = [path for path, _ in placed]
         token = var_child_runnable_config.set({"configurable": {"thread_id": thread_id}})
         try:
-            await asyncio.to_thread(self.binding.sandbox.upload_files, placed)
+            uploaded = await asyncio.to_thread(self.binding.sandbox.upload_files, placed)
+            if len(uploaded) != len(placed) or any(item.error for item in uploaded):
+                raise RuntimeError("Attachment upload failed")
+            from design_agent.runtime.pdf import prepare_pdf
+
+            for path, content in placed:
+                if b"%PDF-" in content[:1024]:
+                    paths.append(await asyncio.to_thread(prepare_pdf, self.binding.sandbox, path))
         finally:
             var_child_runnable_config.reset(token)
-        return [path for path, _ in placed]
+        return paths
 
     def busy(self) -> bool:
         """Whether a helper, watch, check-in or woken turn is outstanding on this runtime's threads."""
