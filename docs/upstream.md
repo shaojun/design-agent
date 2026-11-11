@@ -30,5 +30,6 @@ HyperFrames and Paper are in [docs/partners/](partners/).
 
 | Ask | Why | Today |
 | --- | --- | --- |
+| A binary read transport independent of command stdout limits | BaseSandbox returns Base64 JSON through execute; encoding can exceed the stdout cap even when the source fits the binary preview cap | the Docker adapter reads images (20 MiB) and videos (100 MiB) through bounded file transport, preserving command caps and text pagination; the native video extra decodes sampled frames on the host |
 | A TTL option for the prompt caching it installs | it always appends Anthropic caching with a 5-minute TTL; a lead read again an hour later pays to rewrite its prefix | `CachedChatAnthropic` sets every breakpoint to the role's TTL |
 | A way to shorten skill descriptions in the resident list | vendored skills carry long upstream descriptions | `SkillListMiddleware` swaps them per request from `config/vendored-skills.toml` |

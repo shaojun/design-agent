@@ -168,7 +168,10 @@ def message_content(message: Mapping[str, Any], bot: str) -> tuple[str, list[tup
     elif kind in ("file", "image", "audio", "media"):
         image = kind == "image"
         key = str(content.get("image_key" if image else "file_key") or "")
-        default = f"{key}.png" if image else f"{key}.bin"
+        # Native video events may omit file_name; keep a video suffix so read_file
+        # can select its decoder rather than treating the attachment as generic bytes.
+        suffix = ".png" if image else ".mp4" if kind == "media" else ".bin"
+        default = f"{key}{suffix}"
         files.append(
             (
                 identifier(key),

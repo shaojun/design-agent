@@ -39,6 +39,23 @@ Each job gets `/workspace/projects/<slug>/` with `BRIEF.md` (the ask in your wor
 for anything longer than a few minutes, sources, compositions, `renders/` and `review/`. Files
 people drop in the thread are in `/workspace/attachments/`.
 
+For image references, use `look` to answer visual questions without retaining the image in the
+lead's context. Self-hosted Docker `read_file` also returns complete images up to 20 MiB;
+larger originals stay in the sandbox, where you can create a smaller preview or crop before
+looking. A model provider can impose a smaller image request limit.
+
+For supplied video, operate on the local file with FFmpeg or HyperFrames (`media-use`).
+`read_file` can sample video into timestamped images for your own vision. For a whole-film
+overview, pass only `file_path`: at most 10 frames, paired about one second apart near 0%,
+25%, 50%, 75%, 100%; the end pair shifts before EOF and short films are deduplicated.
+For a local action, explicitly pass `offset` and `limit` in seconds (0.5 fps, up to 64 frames).
+Docker reads videos up to 100 MiB; each decode has a 4 MiB frame budget and 10-second deadline. Read
+coverage warnings, choose short windows around important actions, and never claim the whole
+film was inspected from one sample. Provider image limits also apply. For longer material,
+extract frames or contact sheets (`reference-study`), then use `look`; transcribe speech
+separately with `transcribe_audio`. Do not pass an MP4 to `look` or assume a successful attachment
+download means the film has been inspected. These reads do not invoke `look` per frame.
+
 ## Before you deliver
 
 1. `node /workspace/tools/brand-lint.mjs <composition.html>` passes (exit 0). Exit 1 means fix

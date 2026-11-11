@@ -14,9 +14,12 @@ run config.
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import hashlib
 import io
 import logging
+import mimetypes
 import posixpath
 import shlex
 import shutil
@@ -31,6 +34,7 @@ from deepagents.backends.protocol import (
     ExecuteResponse,
     FileDownloadResponse,
     FileUploadResponse,
+    ReadResult,
 )
 from deepagents.backends.sandbox import MAX_OUTPUT_BYTES, BaseSandbox
 from langgraph.config import get_config
@@ -42,6 +46,9 @@ AGENT_HOME = "/home/node"
 #: Where Deep Agents offloads conversation history, large tool results and media when it
 #: summarizes. Its default is `/`, which the agent cannot write.
 ARTIFACTS_ROOT = "/workspace/.agent"
+#: Binary image reads use file transport, independently of the command stdout budget.
+MAX_IMAGE_READ_BYTES = 20 * 1024 * 1024
+MAX_VIDEO_READ_BYTES = 100 * 1024 * 1024
 #: Paths the agent may write. Everything else in the container is image or staged content.
 AGENT_WRITABLE = (
     "/workspace/projects",
@@ -315,11 +322,19 @@ class DockerSandboxRunner:
             timeout=300,
         )
 
-    def get_file(self, thread_id: str, path: str) -> bytes | None:
+    def get_file(self, thread_id: str, path: str, *, max_bytes: int | None = None) -> bytes | None:
         name = self.container_for(thread_id)
-        result = self._run(
-            ["exec", "--user", AGENT_USER, name, "cat", "--", path], check=False, timeout=300
-        )
+        command = ["cat", "--", path]
+        if max_bytes is not None:
+            # One extra byte distinguishes an oversized file from a complete read.
+            # Keep this outside exec(): its stdout cap corrupts binary payloads.
+            script = (
+                "import os,stat,sys; p=sys.argv[1]; "
+                "sys.exit(1) if not stat.S_ISREG(os.stat(p).st_mode) else None; "
+                "f=open(p,'rb'); sys.stdout.buffer.write(f.read(int(sys.argv[2])+1))"
+            )
+            command = ["python3", "-c", script, path, str(max_bytes)]
+        result = self._run(["exec", "--user", AGENT_USER, name, *command], check=False, timeout=300)
         return result.stdout if result.returncode == 0 else None
 
 
@@ -351,6 +366,37 @@ class DockerSandboxBackend(BaseSandbox):
 
     def execute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
         return self._runner.exec(self._thread_id(), command, timeout=timeout)
+
+    def read(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
+        media_type = mimetypes.guess_type(file_path)[0] or ""
+        image = media_type.startswith("image/")
+        video = media_type.startswith("video/")
+        if not image and not video:
+            return super().read(file_path, offset, limit)
+        if not _under(file_path, AGENT_READABLE):
+            return ReadResult(error="permission_denied")
+        cap = MAX_IMAGE_READ_BYTES if image else MAX_VIDEO_READ_BYTES
+        try:
+            raw = self._runner.get_file(self._thread_id(), file_path, max_bytes=cap)
+        except SandboxUnavailableError:
+            return ReadResult(error=f"Could not read '{file_path}': sandbox unavailable.")
+        if raw is None:
+            return ReadResult(
+                error=f"Could not read '{file_path}': file unavailable or unreadable."
+            )
+        if len(raw) > cap:
+            kind = "Image" if image else "Video"
+            return ReadResult(
+                error=f"{kind} exceeds the {cap // 1024**2} MiB read limit; create a smaller "
+                "preview, crop or clip in the sandbox and read that instead. "
+                "The original file is preserved."
+            )
+        return ReadResult(
+            file_data={"content": base64.b64encode(raw).decode(), "encoding": "base64"}
+        )
+
+    async def aread(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
+        return await asyncio.to_thread(self.read, file_path, offset, limit)
 
     def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
         allowed = [(p, c) for p, c in files if _under(p, AGENT_WRITABLE)]

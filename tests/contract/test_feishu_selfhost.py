@@ -32,6 +32,14 @@ from design_agent.tools.delivery import DeliveredFile, LocalOutputAdapter
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_native_video_without_filename_keeps_a_video_extension() -> None:
+    text, files = message_content(
+        {"message_type": "media", "content": json.dumps({"file_key": "file_video"})}, "ou_bot"
+    )
+    assert text == ""
+    assert files == [("file_video", "file_video.mp4", "file")]
+
+
 def event(mid: str = "om_first", *, direct: bool = False) -> dict[str, Any]:
     return {
         "schema": "2.0",

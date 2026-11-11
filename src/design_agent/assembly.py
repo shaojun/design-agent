@@ -48,6 +48,7 @@ from design_agent.middleware.steering import (
 )
 from design_agent.middleware.today import TodayMiddleware, ZoneFor, fixed_zone
 from design_agent.middleware.tracing import RunTagsMiddleware, TraceLinks, template_marker
+from design_agent.middleware.video_read import VideoOverviewMiddleware
 from design_agent.middleware.watch_tools import WatchToolsMiddleware
 from design_agent.middleware.workspace import WorkspaceStagerMiddleware
 from design_agent.models.factory import Role, build_chat_model, resolve_model
@@ -218,6 +219,7 @@ def build_agent_components(
     ]
     slack = runtime.slack
     middleware.extend(runtime.surface_middleware)
+    middleware.append(VideoOverviewMiddleware(runtime.backend_for))
     servers = services([s.name for s in mcp_servers])
     if slack is not None:
         # Steering reads follow-ups before progress draws the turn; both sit outside the model
@@ -268,6 +270,7 @@ def build_agent_components(
             # Steering notes land before the transcript checkpoint, so a resumed helper keeps them.
             return [
                 WorkerProgressMiddleware(),
+                VideoOverviewMiddleware(runtime.backend_for),
                 *([HelperSteeringMiddleware()] if settings.enable_steering else []),
                 TranscriptCheckpointMiddleware(helper_store),
                 TodayMiddleware(),
