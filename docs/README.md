@@ -4,6 +4,10 @@ Every guide, by what you're trying to do. Working in Claude Code, Codex or Curso
 a step-by-step skill in [.agents/skills/](../.agents/skills/), and [AGENTS.md](../AGENTS.md) says
 which one fits.
 
+For marketing designers: [中文图解指南](guides/marketing-designer-guide.zh-CN.html) — when to use
+Design Agent alongside manual design, video models or coding assistants, with daily scenarios and
+all 36 runtime skills explained in plain language. A self-contained HTML document for offline reading.
+
 ## Set it up and make it yours
 
 | Guide | Covers |
