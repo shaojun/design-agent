@@ -65,3 +65,45 @@ def test_generate_fills_secrets_once(project: Path) -> None:
 def test_a_comment_after_an_empty_value_is_not_the_value(tmp_path: Path) -> None:
     (tmp_path / ".env").write_text("A=            # what A is for\nB=#hex\nC=v # note\n")
     assert read_env(tmp_path) == {"A": "", "B": "#hex", "C": "v"}
+
+
+def test_access_token_mapping_is_generated_once_and_never_displayed(project: Path) -> None:
+    name = "DESIGN_AGENT_ACCESS_TOKEN_CALLERS"
+    assert generate(project, [name]) == [name]
+    first = read_env(project)[name]
+    token, caller = first.split(":")
+    assert len(token) >= 32 and caller == "me"
+    assert generate(project, [name]) == []
+    assert read_env(project)[name] == first
+    row = next(row for row in view(project) if row["name"] == name)
+    assert row["secret"] and row["value"] == "set"
+    assert token not in str(view(project))
+
+
+def test_detailed_comments_do_not_replace_config_groups() -> None:
+    keys = known_keys(ROOT)
+    assert keys["DESIGN_AGENT_ACCESS_TOKEN_CALLERS"].group.startswith("15. inbound")
+    assert keys["DESIGN_AGENT_A2A_URL"].group.startswith("16. a2a")
+    assert keys["DESIGN_AGENT_A2A_VERSION"].group == keys["DESIGN_AGENT_A2A_URL"].group
+    assert keys["DESIGN_AGENT_NACOS_URL"].group.startswith("17. nacos")
+
+
+def test_access_token_mapping_loads_from_env_file(project: Path) -> None:
+    from design_agent.config import Settings
+
+    (project / ".env").write_text(
+        "DESIGN_AGENT_ACCESS_TOKEN_CALLERS=secret-a:alice, secret-b:bob\n"
+    )
+    settings = Settings(_env_file=project / ".env")
+    assert settings.access_token_callers_map() == {"secret-a": "alice", "secret-b": "bob"}
+    assert "secret-a" not in repr(settings)
+
+
+@pytest.mark.parametrize("value", ["secret", "secret:", ":alice", "a:alice,a:bob", "a:b:c"])
+def test_malformed_access_token_mapping_is_rejected_without_secrets(value: str) -> None:
+    from design_agent.config import Settings
+
+    settings = Settings(_env_file=None, access_token_callers=value)
+    with pytest.raises(ValueError, match="requires unique token:caller pairs") as error:
+        settings.access_token_callers_map()
+    assert value not in str(error.value)

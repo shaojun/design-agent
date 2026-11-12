@@ -142,3 +142,11 @@ Confirm each URL still resolves when you move a pin forward; the docs site renam
 - Direct DeepSeek peak/off-peak rates: <https://api-docs.deepseek.com/quick_start/pricing/>
 - Model Studio regional/token-tier rates: <https://www.alibabacloud.com/help/en/model-studio/model-pricing>
 - Model Studio cache billing: <https://www.alibabacloud.com/help/en/model-studio/context-cache>
+
+## Agent interoperability and registry
+
+- A2A 1.0 specification: <https://a2a-protocol.org/v1.0.0/specification/>
+- A2A Python SDK 1.3.0: <https://github.com/a2aproject/a2a-python/tree/v1.3.0>
+- Nacos 3.3 Client API: <https://nacos.io/en/docs/latest/manual/user/open-api/>
+- Nacos Agent registry: <https://nacos.io/en/docs/latest/manual/user/ai/agent-registry/>
+- Nacos access credentials: <https://nacos.io/en/docs/latest/manual/user/auth/>

@@ -67,6 +67,25 @@ sibling skill of ours, or send the change upstream.
 - **A new host tool** is code in `src/design_agent/tools/`: keys stay on the host and results drop
   into the sandbox as files. Follow the change discipline in `AGENTS.md`.
 
+## A2A and service discovery
+
+For heterogeneous callers, enable the self-hosted A2A 1.0 surface with `DESIGN_AGENT_A2A_URL`.
+It defaults to anonymous access, including output downloads: clients share the `a2a-anonymous`
+identity. Set `DESIGN_AGENT_A2A_ALLOW_ANONYMOUS=false` and configure `DESIGN_AGENT_ACCESS_TOKEN_CALLERS` (`token:caller` pairs) for isolation.
+This inbound mapping also authenticates ordinary HTTP routes; keep it masked in configuration UI.
+When renaming an environment setting, update Settings, envfile generation/masking, doctor, examples,
+clients and deployment files together; migrate loaded .env overrides before restarting an idle service.
+Keep ordinary HTTP thread routes authenticated. Keep the adapter in `surfaces/a2a/`, reuse the shared runtime, and declare only
+implemented input types and task behavior. Nacos 3.3 registration is optional; keep registry credentials
+on the host, use an application account, and verify endpoint heartbeat and real SDK calls separately.
+A2A progress lives in `surfaces/a2a/progress.py`: only expose tool names, lifecycle and elapsed time;
+never arguments, raw tool results or exception bodies. Keep progress scoped to the active task thread
+and isolate presentation failures. Card descriptions distinguish project surfaces from enabled instance
+channels; `A2A_DOCUMENTATION_URL` can link deployment instructions. Explorer recovery must query or
+subscribe to a known task id, never retry message submission automatically.
+Run `tests/unit/test_a2a_progress.py`, `tests/contract/test_a2a_contracts.py` and `tests/unit/test_nacos_registry.py` after changes.
+See [A2A and Nacos](../../../docs/a2a-nacos.md) for configuration and other harness adapters.
+
 ## Models and cost
 
 `uv run design-agent config set DESIGN_AGENT_MODEL=provider:model`, then

@@ -166,6 +166,18 @@ class LocalRuntime:
             )
         )
 
+    def thread_busy(self, thread_id: str) -> bool:
+        """Job completion for one API caller must not wait on other callers' jobs."""
+        box = self.services.inbox.box(thread_id)
+        lock = self._locks.get(thread_id)
+        return (
+            any(r.status == "running" and r.thread_id == thread_id for r in REGISTRY.values())
+            or any(w.status == "watching" for w in WATCHES.list(thread_id))
+            or self.waker.pending(thread_id) > 0
+            or bool(box and box.delivery is not None and not box.delivery.done())
+            or bool(lock and lock.locked())
+        )
+
     async def settle(self, *, timeout_seconds: float = 6 * 3600, poll_seconds: float = 2.0) -> bool:
         """Wait until nothing is outstanding (`busy`), so the CLI stays open while a job runs.
         Returns False on timeout."""

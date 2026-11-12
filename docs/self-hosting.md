@@ -14,7 +14,7 @@ durability, and Docker for the sandbox computers. Docker Compose starts all of i
 ```bash
 cp .env.example .env
 uv run design-agent config set DESIGN_AGENT_MODEL=anthropic:claude-opus-5-5 ANTHROPIC_API_KEY=…
-uv run design-agent config generate DESIGN_AGENT_API_TOKENS POSTGRES_PASSWORD
+uv run design-agent config generate DESIGN_AGENT_ACCESS_TOKEN_CALLERS POSTGRES_PASSWORD
 docker compose -f deploy/self-host/compose.yaml up -d --build
 curl -s http://127.0.0.1:8080/health
 ```
@@ -23,9 +23,16 @@ Compose builds the sandbox image (`design-agent-sandbox:local`), starts Postgres
 on `127.0.0.1:8080`. Put your brand pack in `workspace/brand/` and licensed fonts in
 `private-fonts/`; both are mounted read-only.
 
-`DESIGN_AGENT_API_TOKENS` is `token:caller,token:caller`. `config generate` writes one random token
+`DESIGN_AGENT_ACCESS_TOKEN_CALLERS` is `token:caller,token:caller`. `config generate` writes one random token
 for a caller named `me`; add one per person or service. Show your token with care: it is a
-password.
+password. This mapping is shared by the HTTP thread API and A2A when
+`DESIGN_AGENT_A2A_ALLOW_ANONYMOUS=false`. Anonymous A2A ignores supplied tokens and uses a shared
+caller; it does not make ordinary HTTP routes anonymous.
+
+When upgrading, rename the former `DESIGN_AGENT_API_TOKENS` key to
+`DESIGN_AGENT_ACCESS_TOKEN_CALLERS` in every loaded environment file and process environment
+(including a separate `.env.a2a`). Keep the value unchanged. The old name is no longer read.
+The example is organized into numbered groups; A2A and optional Nacos registration are separate.
 
 ## The API
 
@@ -37,9 +44,16 @@ password.
 | `GET /threads/{id}/files/{name}` | downloads a delivered file |
 | `GET /health` | liveness |
 
-Every route but `/health` needs `Authorization: Bearer <token>`. A thread belongs to the caller who
+Ordinary thread routes need `Authorization: Bearer <token>`. A thread belongs to the caller who
 started it; anyone else gets 404. A turn can take minutes (a render runs in the turn only when the
 agent chose to wait); use a generous client timeout and poll `updates` for background work.
+
+## A2A and Nacos
+
+For the optional A2A 1.0 endpoint, caller isolation and Nacos 3.3 registration, see
+[A2A and Nacos](a2a-nacos.md). It uses the same runtime. A2A defaults to anonymous access,
+including A2A output files; all anonymous clients share one identity and task space.
+Set `DESIGN_AGENT_A2A_ALLOW_ANONYMOUS=false` to require the configured caller tokens.
 
 ## Slack
 

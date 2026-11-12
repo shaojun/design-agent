@@ -35,6 +35,29 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "subProcess": false
+        },
+        {
+            "name": "ARC: Web Client Explorer",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "program": "${workspaceFolder}/scripts/agent-registration-center/app.py",
+            "args": [
+                "--port",
+                "8099"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "justMyCode": true,
+            "subProcess": false,
+            "env": {
+                "PYTHONUNBUFFERED": "1"
+            },
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "Uvicorn running on (http://\\S+)",
+                "uriFormat": "%s"
+            }
         }
     ]
 }

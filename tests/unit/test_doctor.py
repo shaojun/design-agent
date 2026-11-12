@@ -41,3 +41,21 @@ def test_self_hosting_keys_in_env_are_named_never_printed(tmp_path: Path) -> Non
     assert check.status == "warn"
     assert "SLACK_APP_TOKEN" in check.detail and "DATABASE_URL" not in check.detail
     assert "secret" not in check.detail.replace("deployment secrets", "")
+
+
+def test_nacos_credentials_are_flagged_before_mda_deploy_without_values(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    (root / ".env").write_text(
+        "DESIGN_AGENT_NACOS_USERNAME=private-registry-user\n"
+        "DESIGN_AGENT_NACOS_PASSWORD=private-registry-password\n"
+        "DESIGN_AGENT_ACCESS_TOKEN_CALLERS=private-token:private-caller\n"
+    )
+    check = _check_mda_deploy(root)
+    assert check.status == "warn"
+    for name in (
+        "DESIGN_AGENT_NACOS_USERNAME",
+        "DESIGN_AGENT_NACOS_PASSWORD",
+        "DESIGN_AGENT_ACCESS_TOKEN_CALLERS",
+    ):
+        assert name in check.detail
+    assert "private-" not in check.detail

@@ -224,9 +224,21 @@ class Settings(BaseSettings):
         default="socket_mode", validation_alias=_alias("SLACK_TRANSPORT")
     )
     database_url: SecretStr | None = Field(default=None, validation_alias=_alias("DATABASE_URL"))
-    api_tokens: SecretStr | None = None
+    access_token_callers: SecretStr | None = None
+    """Inbound token:caller mapping shared by HTTP API and authenticated A2A; never an LLM key."""
     api_host: str = "127.0.0.1"
     api_port: int = Field(default=8080, ge=1, le=65535)
+
+    # An explicit reachable base URL enables the self-hosted A2A surface.
+    a2a_url: str | None = None
+    a2a_allow_anonymous: bool = True
+    a2a_documentation_url: str | None = None
+    a2a_name: str = Field(default="design-agent", pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+    a2a_version: str = Field(default="1.0.0", pattern=r"^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$")
+    nacos_url: str | None = None
+    nacos_namespace: str = "public"
+    nacos_username: str | None = None
+    nacos_password: SecretStr | None = None
 
     live_tests: bool = False
 
@@ -267,7 +279,12 @@ class Settings(BaseSettings):
         "slack_app_token",
         "slack_signing_secret",
         "database_url",
-        "api_tokens",
+        "access_token_callers",
+        "a2a_url",
+        "a2a_documentation_url",
+        "nacos_url",
+        "nacos_username",
+        "nacos_password",
         mode="before",
     )
     @classmethod
@@ -289,15 +306,19 @@ class Settings(BaseSettings):
     def egress_allowlist(self) -> tuple[str, ...]:
         return tuple(h.strip() for h in self.sandbox_egress_allow.split(",") if h.strip())
 
-    def api_token_map(self) -> dict[str, str]:
+    def access_token_callers_map(self) -> dict[str, str]:
         """`token:caller,token:caller` as a lookup. Values stay in memory only."""
-        if self.api_tokens is None:
+        if self.access_token_callers is None:
             return {}
         result: dict[str, str] = {}
-        for pair in self.api_tokens.get_secret_value().split(","):
+        for pair in self.access_token_callers.get_secret_value().split(","):
             token, sep, caller = pair.strip().partition(":")
-            if sep and token and caller:
-                result[token] = caller
+            token, caller = token.strip(), caller.strip()
+            if not sep or not token or not caller or ":" in caller or token in result:
+                raise ValueError(
+                    "DESIGN_AGENT_ACCESS_TOKEN_CALLERS requires unique token:caller pairs"
+                )
+            result[token] = caller
         return result
 
     def resolved_brand_path(self, root: Path) -> Path:

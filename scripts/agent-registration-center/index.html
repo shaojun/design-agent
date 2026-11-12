@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Agent Registration Center · 本地演示</title>
+    <link rel="stylesheet" href="/assets/app.css" />
+    <script src="/assets/app.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        arc<span>Agent Registration Center Explorer</span>
+      </div>
+      <span class="pill">LOCAL DEMO · A2A 1.0</span>
+    </header>
+    <main>
+      <section class="intro">
+        <p class="eyebrow">DISCOVER → SELECT → CALL</p>
+        <h1>发现 Agent，发起真实任务。</h1>
+        <p>连接 Nacos 目录，查看可用服务，通过发现的端点使用 A2A 协议调用。</p>
+      </section>
+      <section class="panel">
+        <div class="section-title">
+          <h2><b>01</b> 连接 Nacos</h2>
+          <span id="connection" role="status">尚未连接</span>
+        </div>
+        <form id="connect-form">
+          <div class="connection-grid">
+            <label
+              >Nacos 地址<input
+                id="registry-url"
+                type="url"
+                required
+                value="https://arc.meerkatai.cn"
+            /></label>
+            <label
+              >Namespace<input id="namespace" required value="public"
+            /></label>
+            <label
+              >用户名<input
+                id="username"
+                required
+                autocomplete="username"
+                placeholder="Nacos 应用账号"
+                value="nacos"
+            /></label>
+            <label
+              >密码<input
+                id="password"
+                required
+                type="password"
+                autocomplete="current-password"
+                placeholder="Nacos 密码"
+                value="Meerkat123"
+            /></label>
+          </div>
+          <div class="actions">
+            <label id="saved-registry-label" class="check" hidden
+              ><input id="saved-registry" type="checkbox" />使用启动时指定的本地
+              Nacos 凭证</label
+            ><button id="connect" type="submit">连接并发现</button
+            ><button id="disconnect" type="button" class="secondary" disabled>
+              断开
+            </button>
+          </div>
+        </form>
+        <p class="hint">
+          账号需要目录读取权限。密码只用于本次登录，Nacos
+          令牌保存在本地进程内存；连接过期后请重新登录。
+        </p>
+      </section>
+      <div id="notice" role="alert" hidden></div>
+      <div class="workspace">
+        <aside class="panel">
+          <div class="section-title">
+            <h2><b>02</b> Agent 目录 <small id="count">0</small></h2>
+            <button id="refresh" class="secondary compact" disabled>
+              刷新
+            </button>
+          </div>
+          <p class="hint">
+            当前 namespace 中账号可见的全部 Agent；自动遍历分页。
+          </p>
+          <input
+            id="filter"
+            aria-label="筛选 Agent"
+            placeholder="按名称筛选…"
+          />
+          <div id="agents">
+            <p class="empty">连接 Nacos 后，服务将显示在这里。</p>
+          </div>
+        </aside>
+        <section class="panel detail-panel">
+          <div class="section-title">
+            <h2><b>03</b> 详情与调用</h2>
+          </div>
+          <p id="selection-empty" class="empty">从左侧选择一个 Agent。</p>
+          <div id="selected" hidden>
+            <div class="agent-heading">
+              <h3 id="agent-title"></h3>
+              <label>版本<select id="version"></select></label>
+            </div>
+            <p id="description"></p>
+            <div id="card-brief" class="brief-grid"></div>
+            <div class="brief-section">
+              <h4>技能与示例</h4>
+              <div id="skills" class="skill-grid"></div>
+            </div>
+            <details>
+              <summary>发现的端点与健康状态</summary>
+              <div id="endpoint-list"></div>
+            </details>
+            <details>
+              <summary>完整服务详情 / AgentCard</summary>
+              <pre id="raw-detail"></pre>
+            </details>
+            <div class="credentials-bar">
+              <label>调用端点<select id="endpoint" required></select></label>
+              <label
+                >Agent Bearer token<input
+                  id="agent-token"
+                  type="password"
+                  autocomplete="off"
+                  aria-describedby="agent-auth-hint token-help-content token-error"
+                  placeholder="仅填写 token，不包含 Bearer 前缀"
+              /></label>
+              <label id="saved-agent-label" class="check" hidden
+                ><input id="saved-agent" type="checkbox" />使用本地 Agent
+                凭证（限定 origin）</label
+              >
+            </div>
+            <p id="agent-auth-hint" class="hint"></p>
+            <p id="caller-isolation-hint" class="hint"></p>
+            <p id="token-status" class="hint" role="status"></p>
+            <div
+              id="token-error"
+              class="action-notice"
+              role="alert"
+              hidden
+            ></div>
+            <details id="token-help" class="token-help">
+              <summary>
+                Agent token 如何获取？为什么 Nacos 登录后还需要它？
+              </summary>
+              <div id="token-help-content">
+                <p>
+                  本仓库 Agent 的 A2A 默认允许匿名访问，可留空 token。
+                  只有部署者设置
+                  <code>DESIGN_AGENT_A2A_ALLOW_ANONYMOUS=false</code>
+                  后才需要下面的凭证；请以当前 AgentCard 声明为准。
+                </p>
+                <p>
+                  <strong>向目标 Agent 的部署者 / 管理员申请调用凭证。</strong
+                  >这是目标服务的访问权限，不是 Nacos 密码或
+                  accessToken，也不是模型供应商 API key。AgentCard
+                  只描述鉴权方式，不包含真实 token。
+                </p>
+                <ol>
+                  <li>
+                    确认当前选中的 Agent
+                    和调用端点，向该服务的部署者申请与你的调用身份对应的 token。
+                  </li>
+                  <li>
+                    如果目标是本仓库的 Agent：由服务器管理员查看该 Agent
+                    启动时加载的
+                    <code>DESIGN_AGENT_ACCESS_TOKEN_CALLERS</code>。配置格式为
+                    <code>&lt;token&gt;:&lt;caller-id&gt;,...</code>，这里只填写
+                    token 部分，不带 caller-id 或 <code>Bearer </code> 前缀。
+                  </li>
+                  <li>
+                    其它 harness 的 token 由其服务或鉴权网关配置 /
+                    签发，按部署者提供的方法获取；不能从 Nacos
+                    目录中推算或自动领取。
+                  </li>
+                  <li>
+                    本应用可用
+                    <code>--credentials-file /path/to/private-access.json</code>
+                    或环境变量
+                    <code>ARC_CREDENTIALS_FILE</code> 加载受保护文件的
+                    <code>origin/token</code>。重启应用后勾选“使用本地 Agent
+                    凭证”；不会把文件中的 token 返回到页面。
+                  </li>
+                </ol>
+                <p>
+                  缺少 token：本地提示，任务未提交。HTTP
+                  401：目标服务未接受凭证，请确认 token 是否正确、有效且属于当前
+                  Agent。HTTP 403：目标服务拒绝访问，需部署者检查账号 /
+                  任务权限。
+                </p>
+              </div>
+            </details>
+            <section class="protocol-guide">
+              <h4>A2A 协议操作与当前 Agent 声明</h4>
+              <p class="hint">
+                下表操作名与请求类型来自官方 SDK 的 A2AService
+                协议定义；支持状态来自此 AgentCard。 Card 的 skills
+                是业务技能，不是额外 HTTP 接口。标准操作没有逐项的 Card
+                开关，是否成功仍由服务实现与任务状态决定。
+                <a
+                  href="https://a2a-protocol.org/v1.0.0/specification/#31-core-operations"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >查看 A2A 1.0 规范</a
+                >
+              </p>
+              <p id="protocol-source" class="hint"></p>
+              <label class="check"
+                ><input id="force-test" type="checkbox" />仍然测试 Card
+                未声明支持的能力</label
+              >
+              <p id="force-hint" class="hint">
+                默认遵循 Card
+                声明。勾选后会真实发送相应协议操作，可能由远端返回“不支持”；不会绕过鉴权。
+              </p>
+              <details open>
+                <summary>11 项协议操作 · 声明依据 · 测试入口</summary>
+                <div class="operation-table-wrap">
+                  <table class="operation-table">
+                    <thead>
+                      <tr>
+                        <th>A2A 操作 / 用途</th>
+                        <th>AgentCard 对应字段</th>
+                        <th>当前声明</th>
+                        <th>测试</th>
+                      </tr>
+                    </thead>
+                    <tbody id="operation-map"></tbody>
+                  </table>
+                </div>
+              </details>
+            </section>
+            <div class="tabs" role="tablist" aria-label="Agent 操作">
+              <button
+                id="tab-chat"
+                role="tab"
+                aria-selected="true"
+                aria-controls="panel-chat"
+                data-tab="chat"
+              >
+                对话
+              </button>
+              <button
+                id="tab-tasks"
+                role="tab"
+                aria-selected="false"
+                aria-controls="panel-tasks"
+                data-tab="tasks"
+              >
+                任务管理
+              </button>
+              <button
+                id="tab-push"
+                role="tab"
+                aria-selected="false"
+                aria-controls="panel-push"
+                data-tab="push"
+              >
+                Push 配置
+              </button>
+              <button
+                id="tab-protocol"
+                role="tab"
+                aria-selected="false"
+                aria-controls="panel-protocol"
+                data-tab="protocol"
+              >
+                协议操作
+              </button>
+            </div>
+            <section id="panel-chat" role="tabpanel" aria-labelledby="tab-chat">
+              <div class="chat-toolbar">
+                <label
+                  >Context ID<input
+                    id="context"
+                    placeholder="首次发送后自动填写" /></label
+                ><label
+                  >继续 Task ID<input
+                    id="continue-task"
+                    placeholder="仅继续 input-required 等非终态任务" /></label
+                ><button id="new-context" type="button" class="secondary">
+                  新会话
+                </button>
+              </div>
+              <div id="chat" class="chat" aria-live="polite">
+                <p class="empty">发送消息，与这个 Agent 开始对话。</p>
+              </div>
+              <div
+                id="chat-notice"
+                class="action-notice"
+                role="alert"
+                aria-live="assertive"
+                hidden
+              ></div>
+              <div class="task-line">
+                <span id="call-state" role="status">尚未发送任务</span
+                ><button id="stop-stream" class="secondary compact" disabled>
+                  停止接收</button
+                ><button id="cancel-current" class="secondary compact" disabled>
+                  请求取消任务</button
+                ><button
+                  id="recover-current"
+                  class="secondary compact"
+                  disabled
+                >
+                  查询 / 恢复接收
+                </button>
+              </div>
+              <p id="watch-status" class="hint" role="status"></p>
+              <form id="call-form" class="composer">
+                <div id="attachments" class="attachments"></div>
+                <label class="sr-only" for="prompt">消息</label
+                ><textarea
+                  id="prompt"
+                  rows="3"
+                  maxlength="20000"
+                  placeholder="输入消息… Ctrl / ⌘ + Enter 发送"
+                >
+Reply with exactly A2A_OK. Do not call tools.</textarea
+                >
+                <div class="chat-auth-bar">
+                  <span id="chat-auth-status"></span
+                  ><button
+                    id="show-token-help"
+                    type="button"
+                    class="secondary compact"
+                  >
+                    填写 / 获取 Agent token
+                  </button>
+                </div>
+                <div class="compose-tools">
+                  <label class="file-button"
+                    >＋ 上传文件<input
+                      id="upload"
+                      type="file"
+                      multiple /></label
+                  ><label
+                    >发送方式<select id="send-mode">
+                      <option value="stream">流式响应</option>
+                      <option value="sync">普通响应</option>
+                      <option value="background">后台任务</option>
+                    </select></label
+                  ><button id="send" type="submit">发送消息 ↗</button>
+                </div>
+                <p id="send-protocol-hint" class="hint"></p>
+                <label class="hint"
+                  ><input id="auto-watch" type="checkbox" checked />
+                  后台提交后自动接收进度；连接中断时查询并恢复（不重复提交消息）</label
+                >
+                <p id="input-hint" class="hint"></p>
+                <details>
+                  <summary>附加 URL / 结构化数据 / 请求选项</summary>
+                  <div class="inline-grid">
+                    <label
+                      >文件 URL<input
+                        id="file-url"
+                        type="url"
+                        placeholder="https://…（由目标 Agent 读取）" /></label
+                    ><label
+                      >Media type<input
+                        id="file-media"
+                        value="application/octet-stream" /></label
+                    ><button
+                      id="add-url"
+                      type="button"
+                      class="secondary compact"
+                    >
+                      添加 URL
+                    </button>
+                  </div>
+                  <label
+                    >结构化 JSON Part<textarea
+                      id="data-part"
+                      rows="2"
+                      placeholder='{"key":"value"}'
+                    ></textarea>
+                  </label>
+                  <label
+                    >SendMessageRequest 附加字段（JSON）<textarea
+                      id="send-options"
+                      rows="2"
+                      placeholder='{"configuration":{"historyLength":10},"metadata":{}}'
+                    ></textarea>
+                  </label>
+                </details>
+              </form>
+            </section>
+            <section
+              id="panel-tasks"
+              role="tabpanel"
+              aria-labelledby="tab-tasks"
+              hidden
+            >
+              <div
+                id="tasks-notice"
+                class="action-notice"
+                role="alert"
+                hidden
+              ></div>
+              <form id="tasks-form">
+                <div class="inline-grid">
+                  <label
+                    >Context 筛选<input
+                      id="task-context"
+                      placeholder="留空查询所有会话" /></label
+                  ><label
+                    >状态筛选<select id="task-status">
+                      <option value="">全部状态</option>
+                    </select></label
+                  ><label
+                    >每页数量<input
+                      id="task-size"
+                      type="number"
+                      value="20"
+                      min="1"
+                      max="100"
+                  /></label>
+                </div>
+                <div class="actions">
+                  <button type="submit">查询任务</button
+                  ><button
+                    id="next-tasks"
+                    type="button"
+                    class="secondary"
+                    disabled
+                  >
+                    下一页</button
+                  ><label class="check"
+                    ><input
+                      id="include-artifacts"
+                      type="checkbox"
+                      checked
+                    />包含结果</label
+                  >
+                </div>
+              </form>
+              <div id="task-list" class="task-list"></div>
+              <hr />
+              <div class="inline-grid">
+                <label
+                  >Task ID<input
+                    id="task-id"
+                    placeholder="从任务列表选择，或填写 ID" /></label
+                ><label
+                  >历史消息条数<input
+                    id="history-length"
+                    type="number"
+                    min="0"
+                    placeholder="留空使用服务默认值"
+                /></label>
+              </div>
+              <div class="actions">
+                <button id="get-task" class="secondary">查看任务</button
+                ><button id="subscribe-task" class="secondary">
+                  订阅 / 恢复流</button
+                ><button id="cancel-task" class="secondary">取消任务</button
+                ><button id="resume-task" class="secondary">带入对话</button>
+              </div>
+              <p class="hint">
+                取消是否成功由目标服务与当前任务状态决定；“停止接收”只断开本地流。终态任务不能继续，请用同一
+                Context 新建消息。
+              </p>
+              <div id="task-view"></div>
+            </section>
+            <section
+              id="panel-push"
+              role="tabpanel"
+              aria-labelledby="tab-push"
+              hidden
+            >
+              <div
+                id="push-notice"
+                class="action-notice"
+                role="alert"
+                hidden
+              ></div>
+              <p id="push-hint" class="hint"></p>
+              <div class="inline-grid">
+                <label
+                  >Task ID<input
+                    id="push-task"
+                    placeholder="需要配置推送的任务" /></label
+                ><label
+                  >配置 ID<input
+                    id="push-id"
+                    placeholder="创建时可选；查询 / 删除时必填"
+                /></label>
+              </div>
+              <label
+                >回调 URL<input
+                  id="push-url"
+                  type="url"
+                  placeholder="https://your-application.example/a2a/events"
+              /></label>
+              <p class="hint">
+                回调地址需能被远端 Agent
+                访问。本应用管理配置，不提供公网回调接收服务。
+              </p>
+              <label
+                >验证 token（可选）<input
+                  id="push-token"
+                  type="password"
+                  autocomplete="off"
+              /></label>
+              <div class="inline-grid">
+                <label
+                  >Authentication scheme<input
+                    id="push-scheme"
+                    placeholder="Bearer" /></label
+                ><label
+                  >Authentication credentials<input
+                    id="push-credentials"
+                    type="password"
+                    autocomplete="off"
+                /></label>
+              </div>
+              <div class="actions">
+                <button id="push-create">创建配置</button
+                ><button id="push-get" class="secondary">查询配置</button
+                ><button id="push-list" class="secondary">列出配置</button
+                ><button id="push-delete" class="secondary">删除配置</button>
+              </div>
+              <label
+                >下一页 token（列表返回后自动填写）<input
+                  id="push-page"
+                  placeholder="首次查询留空"
+              /></label>
+              <pre id="push-result" hidden></pre>
+            </section>
+            <section
+              id="panel-protocol"
+              role="tabpanel"
+              aria-labelledby="tab-protocol"
+              hidden
+            >
+              <div
+                id="protocol-notice"
+                class="action-notice"
+                role="alert"
+                hidden
+              ></div>
+              <p class="hint">
+                A2A 1.0 的全部 11 项操作。JSON 参数使用协议字段名；可设置
+                tenant、metadata、分页、消息配置等完整参数。
+              </p>
+              <label>操作<select id="operation"></select></label
+              ><label
+                >请求参数<textarea id="operation-params" rows="9">{}</textarea>
+              </label>
+              <p id="operation-support" class="hint"></p>
+              <div class="actions">
+                <button id="run-operation">执行操作</button
+                ><button id="stop-operation" class="secondary" disabled>
+                  停止操作接收</button
+                ><button id="extended-card" class="secondary">
+                  获取扩展 AgentCard
+                </button>
+              </div>
+              <pre id="operation-result" hidden></pre>
+            </section>
+            <details id="event-disclosure">
+              <summary>
+                协议事件与调试记录 <span id="event-count">0</span>
+              </summary>
+              <pre id="events" class="events"></pre>
+            </details>
+          </div>
+        </section>
+      </div>
+      <footer>
+        本地客户端演示 · 不修改 Nacos 注册信息 ·
+        业务调用使用目标服务的模型与工具。停止接收或关闭页面不会取消远端任务。
+      </footer>
+    </main>
+  </body>
+</html>

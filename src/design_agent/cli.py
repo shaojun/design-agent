@@ -282,7 +282,7 @@ def config_set(pairs: tuple[str, ...]) -> None:
 @config.command("generate")
 @click.argument("names", nargs=-1, required=True)
 def config_generate(names: tuple[str, ...]) -> None:
-    """Fill random secrets (DESIGN_AGENT_API_TOKENS, PAPER_BRIDGE_TOKEN, POSTGRES_PASSWORD)."""
+    """Fill random secrets (DESIGN_AGENT_ACCESS_TOKEN_CALLERS, PAPER_BRIDGE_TOKEN, POSTGRES_PASSWORD)."""
     from design_agent.envfile import EnvFileError, generate
 
     try:

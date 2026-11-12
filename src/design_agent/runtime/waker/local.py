@@ -37,6 +37,8 @@ class InProcessWaker:
     _seen: set[str] = field(default_factory=set)
     _timers: dict[str, asyncio.Task[None]] = field(default_factory=dict)
     _turns: set[asyncio.Task[None]] = field(default_factory=set)
+    _timer_threads: dict[str, str] = field(default_factory=dict)
+    _turn_threads: dict[asyncio.Task[None], str] = field(default_factory=dict)
 
     async def capture(self, runtime: Any) -> WakeTarget | None:
         config = getattr(runtime, "config", None) or {}
@@ -51,7 +53,9 @@ class InProcessWaker:
             self._turn(target.thread_id, message, started)
         )
         self._turns.add(turn)
+        self._turn_threads[turn] = target.thread_id
         turn.add_done_callback(self._turns.discard)
+        turn.add_done_callback(lambda done: self._turn_threads.pop(done, None))
         try:
             await asyncio.wait_for(started.wait(), self.start_timeout_seconds)
         except TimeoutError:
@@ -84,6 +88,7 @@ class InProcessWaker:
         async def fire() -> None:
             await self.sleep(delay)
             self._timers.pop(schedule_id, None)
+            self._timer_threads.pop(schedule_id, None)
             receipt = await self.wake(target, message, dedupe_key=f"check-in:{schedule_id}")
             if receipt.delivered and self.store is not None:
                 await self.store.adelete(CHECK_INS, schedule_id)
@@ -91,6 +96,7 @@ class InProcessWaker:
         self._timers[schedule_id] = asyncio.get_running_loop().create_task(
             fire(), name=f"check-in {schedule_id}"
         )
+        self._timer_threads[schedule_id] = target.thread_id
 
     async def restore(self, thread_id: str | None = None) -> int:
         """Re-arm the check-ins a previous process kept (one thread's, or all); returns how many."""
@@ -115,11 +121,16 @@ class InProcessWaker:
 
     async def cancel(self, schedule_id: str) -> None:
         timer = self._timers.pop(schedule_id, None)
+        self._timer_threads.pop(schedule_id, None)
         if timer is not None:
             timer.cancel()
         if self.store is not None:
             await self.store.adelete(CHECK_INS, schedule_id)
 
-    def pending(self) -> int:
+    def pending(self, thread_id: str | None = None) -> int:
         """Timers and woken turns still outstanding (the CLI waits for these before exiting)."""
-        return len(self._timers) + sum(1 for t in self._turns if not t.done())
+        if thread_id is None:
+            return len(self._timers) + sum(1 for t in self._turns if not t.done())
+        return sum(t == thread_id for t in self._timer_threads.values()) + sum(
+            t == thread_id and not handle.done() for handle, t in self._turn_threads.items()
+        )

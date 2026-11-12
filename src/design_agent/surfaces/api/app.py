@@ -11,9 +11,11 @@ Not the LangGraph Agent Server protocol; a small surface for your own tools and 
 - `GET /threads/{thread_id}/files/{name}` downloads a delivered file.
 - `GET /health`.
 
-Every route but `/health` needs `Authorization: Bearer <token>`; `DESIGN_AGENT_API_TOKENS` maps
+Ordinary thread routes need `Authorization: Bearer <token>`; `DESIGN_AGENT_ACCESS_TOKEN_CALLERS` maps
 tokens to callers (`token:caller,...`). A thread belongs to the caller who started it; another
-caller gets 404 for it, never its contents. With no tokens configured the server refuses to start.
+caller gets 404 for it, never its contents. With no tokens configured the server refuses to start
+unless anonymous A2A is enabled. A2A defaults to anonymous access, including its delivered files;
+set A2A_ALLOW_ANONYMOUS=false to require caller tokens (see surfaces/a2a/).
 
 Durability comes from `runtime/persistence.py` (Postgres with `DATABASE_URL`). At startup the
 server sweeps what a restart killed and re-arms check-ins; every 15 minutes it sweeps again.
@@ -81,6 +83,9 @@ class ApiState:
         await self.store.aput((*UPDATES, thread_id), f"{count:08d}", {"text": text})
 
 
+ANONYMOUS_A2A_CALLER = "a2a-anonymous"
+
+
 def _caller(request: Request) -> str:
     state: ApiState = request.app.state.api
     header = request.headers.get("authorization", "")
@@ -100,6 +105,8 @@ async def _owned(request: Request, thread_id: str, caller: str, *, create: bool)
     state: ApiState = request.app.state.api
     item = await state.store.aget(THREADS, thread_id)
     if item is None and create:
+        if thread_id.startswith("a2a-"):
+            raise HTTPException(status_code=404, detail="no such thread")
         await state.store.aput(THREADS, thread_id, {"owner": caller})
         return
     if item is None or not hmac.compare_digest(str(item.value.get("owner")), caller):
@@ -118,11 +125,15 @@ def create_app(
     build: Callable[..., LocalRuntime] = build_local_runtime,
 ) -> FastAPI:
     settings = settings or Settings()
-    tokens = settings.api_token_map()
-    if not tokens:
+    tokens = settings.access_token_callers_map()
+    if not tokens and not (settings.a2a_url and settings.a2a_allow_anonymous):
         raise RuntimeError(
-            "DESIGN_AGENT_API_TOKENS is empty: the API refuses to serve without callers"
+            "DESIGN_AGENT_ACCESS_TOKEN_CALLERS is empty: the API refuses to serve without callers"
         )
+    if settings.nacos_url and not settings.a2a_url:
+        raise ValueError("Nacos registration requires DESIGN_AGENT_A2A_URL")
+    a2a_handler = None
+    registry = None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -139,6 +150,12 @@ def create_app(
             def posted(thread_id: str, text: str) -> None:
                 asyncio.get_running_loop().create_task(holder[0].record_update(thread_id, text))
 
+            surface_middleware: tuple[Any, ...] = ()
+            if settings.a2a_url:
+                from design_agent.surfaces.a2a.progress import A2AProgressMiddleware
+
+                surface_middleware = (A2AProgressMiddleware(app.state.a2a_progress),)
+
             runtime = build(
                 settings,
                 project_root,
@@ -147,16 +164,25 @@ def create_app(
                 replies=posted,
                 mcp_servers=servers,
                 mcp_tools=loaded.tools,
+                surface_middleware=surface_middleware,
             )
             holder.append(ApiState(runtime=runtime, store=store, tokens=tokens))
             app.state.api = holder[0]
+            if a2a_handler is not None:
+                await app.state.a2a_store.recover()
             await maintenance.start(runtime, store)
             keeper = asyncio.get_running_loop().create_task(
                 maintenance.run(runtime, store), name="maintenance"
             )
             try:
+                if registry is not None:
+                    registry.start()
                 yield
             finally:
+                if registry is not None:
+                    await registry.aclose()
+                if a2a_handler is not None:
+                    await a2a_handler.aclose()
                 keeper.cancel()
                 await runtime.services.aclose()
                 if runtime.binding.runner is not None:
@@ -167,7 +193,13 @@ def create_app(
     @app.get("/health")
     async def health(request: Request) -> dict[str, Any]:
         state: ApiState | None = getattr(request.app.state, "api", None)
-        return {"ok": state is not None, "sandbox": state.runtime.binding.name if state else None}
+        return {
+            "ok": state is not None,
+            "sandbox": state.runtime.binding.name if state else None,
+            "nacos": {"registered": registry.registered, "error": registry.last_error}
+            if registry is not None
+            else None,
+        }
 
     @app.post("/threads/{thread_id}/messages", response_model=MessageOut)
     async def post_message(
@@ -218,9 +250,15 @@ def create_app(
         fresh = [str(i.value.get("text", "")) for i in items[after:]]
         return Updates(updates=fresh, cursor=len(items))
 
+    def file_caller(thread_id: str, request: Request) -> str:
+        # Anonymous access covers A2A output files only, never ordinary HTTP threads.
+        if settings.a2a_url and settings.a2a_allow_anonymous and thread_id.startswith("a2a-"):
+            return ANONYMOUS_A2A_CALLER
+        return _caller(request)
+
     @app.get("/threads/{thread_id}/files/{name}")
     async def download(
-        thread_id: str, name: str, request: Request, caller: str = Depends(_caller)
+        thread_id: str, name: str, request: Request, caller: str = Depends(file_caller)
     ) -> FileResponse:
         await _owned(request, thread_id, caller, create=False)
         state: ApiState = request.app.state.api
@@ -230,4 +268,12 @@ def create_app(
             raise HTTPException(status_code=404, detail="no such file")
         return FileResponse(path, filename=path.name)
 
+    if settings.a2a_url:
+        from design_agent.surfaces.a2a.app import install_a2a
+
+        a2a_handler = install_a2a(app, settings)
+        if settings.nacos_url:
+            from design_agent.surfaces.a2a.nacos import NacosRegistry
+
+            registry = NacosRegistry(settings, app.state.a2a_card)
     return app

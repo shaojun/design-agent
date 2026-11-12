@@ -24,7 +24,7 @@ Setup comes first: `uv run design-agent doctor` should pass and the brand pack s
 2. **Check the keys.** `mda deploy` forwards every `.env` key except LangSmith's as a deployment
    secret. List the key *names* in `.env` and confirm they are only what the deployed agent uses
    (model, media, `DESIGN_AGENT_*`, `PAPER_*`); self-hosting keys (`SLACK_*`, `DATABASE_URL`,
-   `DESIGN_AGENT_API_TOKENS`) must not be there. Renders in `workspace/out/` ship too and count
+   `DESIGN_AGENT_ACCESS_TOKEN_CALLERS`) must not be there. Renders in `workspace/out/` ship too and count
    toward MDA's 200 MB archive limit. `uv run design-agent doctor` names all of this
    (`mda-deploy`), and `uv run mda build` compiles what would ship into `.mda/build/`.
 3. **Try a copy first.** `uv run mda deploy --name design-agent-test` is a separate deployment; the
@@ -42,7 +42,7 @@ Setup comes first: `uv run design-agent doctor` should pass and the brand pack s
 ## Self-hosted
 
 1. `uv run design-agent config set DESIGN_AGENT_MODEL=…` (the person types the key or sets it in
-   `.env`), then `uv run design-agent config generate DESIGN_AGENT_API_TOKENS POSTGRES_PASSWORD`.
+   `.env`), then `uv run design-agent config generate DESIGN_AGENT_ACCESS_TOKEN_CALLERS POSTGRES_PASSWORD`.
 2. `docker compose -f deploy/self-host/compose.yaml up -d --build`, then
    `curl -s http://127.0.0.1:8080/health`.
 3. **Slack (optional):** create an app from `config/slack-manifest.example.yaml`, set

@@ -16,10 +16,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _LINE = re.compile(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=(.*)$")
-_SECRET = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD)$|^DATABASE_URL$|_TOKENS$")
+_SECTION = re.compile(r"^# === (.+) ===$")
+_SECRET = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD)$|^DATABASE_URL$|_TOKENS$|_ACCESS_TOKEN_CALLERS$")
 #: Keys `generate` may fill with a random value, and how.
 GENERATED = {
-    "DESIGN_AGENT_API_TOKENS": lambda: f"{secrets.token_urlsafe(32)}:me",
+    "DESIGN_AGENT_ACCESS_TOKEN_CALLERS": lambda: f"{secrets.token_urlsafe(32)}:me",
     "PAPER_BRIDGE_TOKEN": lambda: secrets.token_urlsafe(48),
     "POSTGRES_PASSWORD": lambda: secrets.token_urlsafe(24),
 }
@@ -46,8 +47,9 @@ def known_keys(root: Path) -> dict[str, EnvKey]:
     group = "general"
     for line in (root / ".env.example").read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
-        if stripped.startswith("#") and not _LINE.match(stripped.lstrip("# ")):
-            group = stripped.lstrip("# ").split("(")[0].strip().lower() or group
+        section = _SECTION.match(stripped)
+        if section:
+            group = section.group(1).lower()
             continue
         match = _LINE.match(stripped)
         if match:

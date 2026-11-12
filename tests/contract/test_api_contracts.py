@@ -63,7 +63,8 @@ def client(tmp_path: Path) -> TestClient:
     settings = Settings(
         _env_file=None,
         workspace_root=tmp_path / "ws",
-        api_tokens="token-alice-0123456789:alice,token-bob-0123456789:bob",
+        brand_path=Path("examples/brands/example-studio"),
+        access_token_callers="token-alice-0123456789:alice,token-bob-0123456789:bob",
     )  # type: ignore[call-arg]
 
     def build(settings_: Settings, root: Path, **kwargs: Any) -> Any:
@@ -117,7 +118,7 @@ def test_delivered_files_download_for_their_owner_only(tmp_path: Path) -> None:
 
 
 def test_the_api_refuses_to_start_without_callers(tmp_path: Path) -> None:
-    with pytest.raises(RuntimeError, match="DESIGN_AGENT_API_TOKENS"):
+    with pytest.raises(RuntimeError, match="DESIGN_AGENT_ACCESS_TOKEN_CALLERS"):
         create_app(ROOT, Settings(_env_file=None, workspace_root=tmp_path))  # type: ignore[call-arg]
 
 

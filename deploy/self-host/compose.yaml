@@ -1,7 +1,7 @@
 # Self-hosted Design Agent: Postgres, the API (and optionally the Slack adapter), and the sandbox
 # image the agent starts render containers from.
 #
-#   cp .env.example .env    # set a model key, DESIGN_AGENT_API_TOKENS, POSTGRES_PASSWORD
+#   cp .env.example .env    # set a model key, DESIGN_AGENT_ACCESS_TOKEN_CALLERS, POSTGRES_PASSWORD
 #   docker compose -f deploy/self-host/compose.yaml up --build
 #   docker compose -f deploy/self-host/compose.yaml --profile slack up --build   # with Slack
 #

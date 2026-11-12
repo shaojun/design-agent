@@ -83,3 +83,21 @@ declarations are unchanged. Setup and recovery limits: [飞书接入](../feishu.
 The API returns each turn's reply and delivered files, and background news through
 `GET /threads/{id}/updates` ([self-hosting](../self-hosting.md)). The CLI prints each step's tool
 name as it runs and stays open while background work continues.
+
+## A2A (self-hosted)
+
+Setting `DESIGN_AGENT_A2A_URL` enables official SDK 1.3.0 routes for A2A 1.0 JSON-RPC and SSE.
+The executor reuses the API runtime. `DESIGN_AGENT_A2A_ALLOW_ANONYMOUS` defaults to `true`:
+all clients share `a2a-anonymous`, including task queries and output file downloads, and the Card
+does not advertise Bearer auth. Set it to `false` with configured API tokens for caller isolation.
+Ordinary HTTP thread routes still require tokens; changing modes does not migrate task ownership.
+The executor scopes context ids to the caller and persists
+tasks alongside the graph store. A surface middleware sends safe tool lifecycle status messages
+(tool name, step id, outcome and elapsed seconds, without arguments/results) to the active task on
+that thread. Helper replies are forwarded while background work runs. The Explorer retains observed
+steps, submits asynchronously and recovers by querying/subscribing to known task ids without resending
+messages. Task persistence does not make execution restart-durable. It waits for that thread's helpers and wake-ups before completing
+a task; it rejects cancellation before the SDK can stop only the lead. Optional Nacos 3.3 HTTP
+registration publishes the Card, registers runtime endpoints and renews them with one client-level
+heartbeat. Registry outages are retried independently of execution. See [the integration guide](../a2a-nacos.md)
+for supported operations, lifecycle, deployment and tests.
