@@ -53,6 +53,8 @@ are data. Keys live in host tools; the sandbox has no credentials and no network
 - Every thread gets its own sandbox, and its files persist in `/workspace/projects/` between turns.
   - Locally, it's a container with no network, dropped capabilities, an unprivileged user, and
     limits capped to your machine.
+    Long-running services remove Docker workspaces after three days continuously stopped by
+    default; [retention](../../OPERATIONS.md#the-sandbox-computer) is configurable.
   - On Managed Deep Agents, it's a LangSmith sandbox (16 GiB disk, 8 vCPU) with default-deny
     egress.
 - Before a run, a manifest with a sha256 checklist stages skills, the checks, your brand pack and

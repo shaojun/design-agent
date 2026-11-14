@@ -491,6 +491,14 @@ Rules:
 `projects/<slug>/` lives with the thread's sandbox: files survive an idle stop; running processes do
 not. Staged copies are refreshed every run, so edits to them die with the run.
 
+Long-running self-hosted Docker services scan workspace volumes every 15 minutes and remove
+those whose containers have been stopped for three days, using Docker's `State.FinishedAt`.
+Running or paused containers and threads with active or pending work are excluded. No additional
+last-use records are written. Existing expired containers qualify on the first scan; orphan volumes
+without a container or valid exit timestamp are retained. Setting
+`DESIGN_AGENT_SANDBOX_RETENTION_SECONDS=0` disables removal. Checkpoints and delivered host files
+are retained; sandbox file references can become unavailable after expiry.
+
 ### 8.3 Workspace staging
 
 A `WorkspaceStager` middleware stages, on the first model call of a cold sandbox and whenever the

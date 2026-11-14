@@ -178,6 +178,17 @@ class LocalRuntime:
             or bool(lock and lock.locked())
         )
 
+    def sandbox_busy(self, container_name: str) -> bool:
+        """Protect active threads and restored check-ins before the sandbox is accessed again."""
+        runner = self.binding.runner
+        if runner is None:
+            return False
+        threads = set(self._locks) | self.waker.pending_threads()
+        return any(
+            runner.names_for(thread)[0] == container_name and self.thread_busy(thread)
+            for thread in threads
+        )
+
     async def settle(self, *, timeout_seconds: float = 6 * 3600, poll_seconds: float = 2.0) -> bool:
         """Wait until nothing is outstanding (`busy`), so the CLI stays open while a job runs.
         Returns False on timeout."""

@@ -127,6 +127,12 @@ class InProcessWaker:
         if self.store is not None:
             await self.store.adelete(CHECK_INS, schedule_id)
 
+    def pending_threads(self) -> set[str]:
+        """Threads with a queued check-in or unfinished wake-up, including restored check-ins."""
+        return set(self._timer_threads.values()) | {
+            thread for task, thread in list(self._turn_threads.items()) if not task.done()
+        }
+
     def pending(self, thread_id: str | None = None) -> int:
         """Timers and woken turns still outstanding (the CLI waits for these before exiting)."""
         if thread_id is None:

@@ -38,6 +38,24 @@ Per thread: one container (self-hosted, local) or one LangSmith sandbox (MDA), w
 files in `/workspace/projects/` kept between turns. Idle containers stop after
 `DESIGN_AGENT_SANDBOX_IDLE_TTL_SECONDS` and restart on the next command; their volumes stay.
 
+Long-running Docker services scan the service's labelled sandbox containers every 15 minutes.
+Containers continuously stopped for `DESIGN_AGENT_SANDBOX_RETENTION_SECONDS` (259200 seconds /
+three days by default) are removed with their workspace volumes. Age comes from Docker's
+`State.FinishedAt`, including for containers created before a host-process restart; no host usage
+files, extra volume labels or container filesystem changes are needed. Restarting and stopping a
+container starts a new retention period. Set the setting to `0` to disable removal.
+
+Running, paused or restarting containers, active turns, pending background work, invalid exit
+timestamps and volumes referenced by other containers are skipped. Existing stopped containers
+can be removed on the first scan if their `FinishedAt` is already past retention. Orphan volumes
+without a container are retained because they have no trustworthy exit timestamp. A failed volume
+removal after container removal leaves such an orphan and logs a warning for operator review.
+
+Removal deletes attachments, project sources, renders and offloaded history/media in that workspace.
+Database checkpoints and `workspace/out/` deliveries remain, but their references to deleted sandbox
+files stop working. Continuing an expired thread creates a fresh workspace; resend needed files.
+Back up needed sources before expiry. The standalone CLI does not run the periodic cleanup loop.
+
 ## Costs
 
 Every model call is priced from `config/prices.toml` (list prices with the date checked and the

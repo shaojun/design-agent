@@ -1,6 +1,6 @@
 """What a long-running self-hosted process does in the background: stop idle sandbox containers
-every minute (their volumes stay) and sweep what a restart killed every 15 minutes, as MDA's
-housekeeping schedule does there. Started next to the API or the Slack adapter."""
+every minute and remove expired Docker workspaces and sweep what a restart killed every 15
+minutes. Started next to the API, Slack or Feishu adapter."""
 
 from __future__ import annotations
 
@@ -30,11 +30,18 @@ async def run(runtime: LocalRuntime, store: Any) -> None:
         runner = runtime.binding.runner
         if runner is not None:
             try:
-                await asyncio.to_thread(runner.reap_idle)
+                await asyncio.to_thread(runner.reap_idle, protected=runtime.thread_busy)
             except Exception as error:  # noqa: BLE001 - the next pass tries again
                 _LOGGER.warning("[maintenance] reaping sandboxes failed: %s", type(error).__name__)
         if elapsed >= SWEEP_SECONDS:
             elapsed = 0
+            if runner is not None:
+                try:
+                    await asyncio.to_thread(runner.prune_unused, protected=runtime.sandbox_busy)
+                except Exception as error:  # noqa: BLE001 - retry on the next sweep
+                    _LOGGER.warning(
+                        "[maintenance] workspace cleanup failed: %s", type(error).__name__
+                    )
             try:
                 await runtime.services.sweep(store)
             except Exception as error:  # noqa: BLE001 - the next pass tries again

@@ -112,6 +112,8 @@ class Settings(BaseSettings):
     sandbox_mem_gib: int = Field(default=16, ge=1, le=256)
     sandbox_fs_gib: int = Field(default=16, ge=2, le=512)
     sandbox_idle_ttl_seconds: int = Field(default=600, ge=60)
+    sandbox_retention_seconds: int = Field(default=3 * 24 * 3600, ge=0)
+    """Remove Docker containers and workspaces stopped this long; zero disables removal."""
     sandbox_egress_allow: str = ""
     """Comma-separated hosts the sandbox may reach at run time; everything else is denied."""
     max_parallel_builders: int = Field(default=3, ge=1, le=16)

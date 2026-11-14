@@ -80,6 +80,9 @@ enable Compose's `--profile feishu`; it shares the agent, persistence and sandbo
   thread's next turn and can be resumed from their saved transcripts) and re-arms check-ins; one
   that came due while it was down fires at once. The sweep repeats every 15 minutes.
 - Sandbox containers and their per-thread volumes persist between turns; idle ones are stopped.
+  By default, a 15-minute maintenance scan removes containers stopped for three days (using Docker's
+  `State.FinishedAt`) and their workspaces. `DESIGN_AGENT_SANDBOX_RETENTION_SECONDS=0` disables removal. See
+  [workspace retention](../OPERATIONS.md#the-sandbox-computer) for data loss and migration details.
 
 ## Security
 

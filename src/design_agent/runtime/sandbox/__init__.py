@@ -94,6 +94,7 @@ def docker_binding(settings: Settings, project_root: Path) -> SandboxBinding:
         image=settings.sandbox_image,
         limits=DockerLimits(vcpus=settings.sandbox_vcpus, mem_gib=settings.sandbox_mem_gib),
         idle_ttl_seconds=settings.sandbox_idle_ttl_seconds,
+        retention_seconds=settings.sandbox_retention_seconds,
     )
     sandbox = DockerSandboxBackend(runner)
     return SandboxBinding(

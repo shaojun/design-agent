@@ -18,9 +18,11 @@ import asyncio
 import base64
 import hashlib
 import io
+import json
 import logging
 import mimetypes
 import posixpath
+import re
 import shlex
 import shutil
 import subprocess
@@ -29,6 +31,7 @@ import threading
 import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from deepagents.backends.protocol import (
     ExecuteResponse,
@@ -118,6 +121,8 @@ class DockerSandboxRunner:
         docker: str = "docker",
         prefix: str = "design-agent",
         clock: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
+        retention_seconds: int = 3 * 24 * 3600,
     ) -> None:
         self.image = image
         self.limits = limits or DockerLimits()
@@ -125,6 +130,8 @@ class DockerSandboxRunner:
         self._docker = docker
         self._prefix = prefix
         self._clock = clock
+        self._wall_clock = wall_clock
+        self.retention_seconds = retention_seconds
         self._lock = threading.Lock()
         self._containers: dict[str, _Container] = {}
 
@@ -266,16 +273,110 @@ class DockerSandboxRunner:
             timeout=60,
         )
 
-    def reap_idle(self) -> list[str]:
+    def reap_idle(self, *, protected: Callable[[str], bool] = lambda _: False) -> list[str]:
         """Stop containers idle past the TTL. Their volumes (the thread's files) stay."""
         stopped: list[str] = []
         now = self._clock()
         with self._lock:
-            for container in self._containers.values():
+            for thread, container in self._containers.items():
+                if protected(thread):
+                    container.last_used = self._clock()
+                    continue
                 if now - container.last_used >= self.idle_ttl_seconds:
                     self._run(["stop", "--time", "5", container.name], check=False, timeout=60)
                     stopped.append(container.name)
         return stopped
+
+    def _inspect(self, kind: str, name: str) -> dict[str, object]:
+        result = self._run([kind, "inspect", "--format", "{{json .}}", name])
+        data = json.loads(result.stdout)
+        if not isinstance(data, dict):
+            raise ValueError("unexpected Docker inspect response")
+        return data
+
+    def _expired_workspace(self, data: dict[str, object]) -> tuple[str, str] | None:
+        """Return this service's container and volume names only for a valid, expired exit."""
+        state, config = data.get("State"), data.get("Config")
+        if not isinstance(state, dict) or not isinstance(config, dict):
+            return None
+        name = str(data.get("Name") or "").removeprefix("/")
+        match = re.fullmatch(rf"{re.escape(self._prefix)}-([0-9a-f]{{16}})", name)
+        labels = config.get("Labels") or {}
+        if (
+            match is None
+            or not isinstance(labels, dict)
+            or labels.get(f"{self._prefix}.thread") != "1"
+            or state.get("Status") != "exited"
+            or any(state.get(key) for key in ("Running", "Paused", "Restarting"))
+        ):
+            return None
+        finished = state.get("FinishedAt")
+        if not isinstance(finished, str):
+            return None
+        timestamp = datetime.fromisoformat(finished.replace("Z", "+00:00"))
+        if timestamp.tzinfo is None or timestamp.year <= 1:
+            return None
+        age = self._wall_clock() - timestamp.timestamp()
+        if age < self.retention_seconds:
+            return None
+        volume = f"{self._prefix}-ws-{match[1]}"
+        mounts = data.get("Mounts")
+        if not isinstance(mounts, list) or not any(
+            m.get("Type") == "volume"
+            and m.get("Name") == volume
+            and m.get("Destination") == "/workspace"
+            for m in mounts
+            if isinstance(m, dict)
+        ):
+            return None
+        return name, volume
+
+    def prune_unused(self, *, protected: Callable[[str], bool] = lambda _: False) -> list[str]:
+        """Remove workspaces stopped past retention using Docker's own FinishedAt timestamp.
+
+        `protected` receives a container name, so restored pending work can be protected without
+        this process having accessed its sandbox yet. Orphan volumes have no exit time and stay.
+        """
+        if self.retention_seconds <= 0:
+            return []
+        listed = self._run(
+            ["container", "ls", "--all", "--filter", f"label={self._prefix}.thread=1", "--quiet"]
+        )
+        removed: list[str] = []
+        for container_id in listed.stdout.decode().split():
+            try:
+                with self._lock:
+                    expired = self._expired_workspace(self._inspect("container", container_id))
+                    if expired is None:
+                        continue
+                    container, volume = expired
+                    if protected(container):
+                        continue
+                    holders = self._run(
+                        ["container", "ls", "--all", "--filter", f"volume={volume}", "--quiet"]
+                    )
+                    if holders.stdout.decode().split() != [container_id]:
+                        continue
+                    self._run(["container", "rm", container_id])
+                    # Docker refuses if another container acquired a reference in the meantime.
+                    self._run(["volume", "rm", volume])
+                    threads = [t for t, c in self._containers.items() if c.name == container]
+                    for thread in threads:
+                        self._containers.pop(thread, None)
+                    removed.append(volume)
+                    _LOGGER.info("[sandbox] removed unused workspace %s", volume)
+            except (
+                SandboxUnavailableError,
+                subprocess.TimeoutExpired,
+                OSError,
+                ValueError,
+            ) as error:
+                _LOGGER.warning(
+                    "[sandbox] workspace cleanup failed for %s: %s",
+                    container_id,
+                    type(error).__name__,
+                )
+        return removed
 
     def stop_all(self) -> None:
         with self._lock:

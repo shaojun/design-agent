@@ -39,6 +39,9 @@ Each job gets `/workspace/projects/<slug>/` with `BRIEF.md` (the ask in your wor
 for anything longer than a few minutes, sources, compositions, `renders/` and `review/`. Files
 people drop in the thread are in `/workspace/attachments/`.
 
+Self-hosted Docker workspaces can expire after their container stays stopped (three days by default). If earlier
+sources or attachments are missing, ask for them again; saved chat context does not restore files.
+
 For image references, use `look` to answer visual questions without retaining the image in the
 lead's context. Self-hosted Docker `read_file` also returns complete images up to 20 MiB;
 larger originals stay in the sandbox, where you can create a smaller preview or crop before

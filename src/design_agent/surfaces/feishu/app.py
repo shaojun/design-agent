@@ -297,7 +297,7 @@ class FeishuAdapter:
             if is_new:
                 await self.post(
                     thread,
-                    "已开始新会话。请发送新的任务和所需文件。旧会话及文件已保留，正在执行的旧任务会继续完成。",
+                    "已开始新会话。请发送新的任务和所需文件。旧会话保留，工作文件按服务保留期清理；正在执行的旧任务会继续完成。",
                 )
                 return None
             return thread
