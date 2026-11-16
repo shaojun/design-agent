@@ -31,10 +31,13 @@ The tool runs on the host, so no key ever enters the sandbox; never call a provi
 script. It writes the files (`_0`, `_1` suffixes when `n` > 1) and returns their paths. `model`,
 `size`, `quality`, `n`, `background`, `output_format` and any extra `params` pass straight through to
 the provider, which validates them and explains a refusal in its own words: read the message and
-adjust rather than guessing from memory what is allowed. Every call spends money: explore at low
+adjust rather than guessing from memory what is allowed. When the deployment makes images with
+Google, `size` becomes the nearest aspect ratio, `quality="high"` asks for 2K, and there is no
+transparent background: generate on a plain ground and cut the subject out. Every call spends money: explore at low
 quality, finish once at high.
 
-The tool description names the configured provider. With Alibaba Qwen Image, use a `.png` output;
+Explicit `DESIGN_AGENT_IMAGE_PROVIDER=aliyun` selects Alibaba before OpenAI, Google or the gateway.
+With Alibaba Qwen Image, use a `.png` output;
 `quality` has no effect (the provider uses its defaults), and `output_format` must be omitted or
 `png`. Provider extensions such as `seed`, `prompt_extend` and `negative_prompt` go in `params`.
 Transparent background is a prompt request and is checked in the returned pixels; it is not a

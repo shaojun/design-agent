@@ -34,7 +34,12 @@ def settings(**kwargs: Any) -> Settings:
 
 @pytest.mark.parametrize("has_key", [True, False])
 def test_explicit_aliyun_image_route_never_uses_openai_or_gateway_key(has_key: bool) -> None:
-    selected = settings(openai_api_key="openai-only", langsmith_gateway_api_key="gateway-only")
+    selected = settings(
+        openai_api_key="openai-only",
+        google_api_key="google-only",
+        langsmith_gateway_api_key="gateway-only",
+    )
+    selected.image_model = "gemini-nano-banana-2.1"
     if not has_key:
         selected.dashscope_api_key = None
     route = image_route(selected)

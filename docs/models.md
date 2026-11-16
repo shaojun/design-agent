@@ -12,10 +12,13 @@ ANTHROPIC_API_KEY=…
 default; Google, Groq and Mistral are extras (`uv sync --extra google`). The LangSmith Gateway is an
 optional preset (`langsmith:anthropic/claude-opus-5-5` with `LANGSMITH_GATEWAY_API_KEY`, else
 `LANGSMITH_API_KEY`), never required. Anthropic and OpenAI models go through the gateway's native
-routes and keep every feature in the table below; other providers use its shared route. Image
-generation uses `OPENAI_API_KEY` when it is set; without it, a deployment that uses the gateway (a
-`langsmith:` model or `LANGSMITH_GATEWAY_API_KEY`) generates images through the gateway's OpenAI
-route, with the OpenAI key stored in that gateway workspace. For an OpenAI-compatible endpoint, set `DESIGN_AGENT_MODEL_BASE_URL` and
+routes and keep every feature in the table below; other providers use its shared route. Images
+come from the first of these that is set: `OPENAI_API_KEY` (OpenAI), `GOOGLE_API_KEY` (Google's
+Gemini image models), or, on a deployment that uses the gateway (a `langsmith:` model or
+`LANGSMITH_GATEWAY_API_KEY`), the gateway: its Google path when the lead model is Google, its OpenAI
+path otherwise, with the provider key stored in that gateway workspace.
+`DESIGN_AGENT_IMAGE_MODEL=gemini-…` (for example `gemini-nano-banana-2.1`) picks Google whenever
+Google is reachable. Google's image models make no transparent backgrounds. For an OpenAI-compatible endpoint, set `DESIGN_AGENT_MODEL_BASE_URL` and
 `DESIGN_AGENT_MODEL_API_KEY_ENV` (the name of the variable that holds its key).
 
 ## OpenAI-compatible endpoints
@@ -67,8 +70,9 @@ All inherited roles use the lead's endpoint and key. A different model id for a 
 inherit that endpoint; using different models on the same custom endpoint needs further routing
 support. Other vendors can use the same configuration once their exact vision and tool-calling
 model ids have been checked and added to the registry. Keys stay on the host, outside Docker.
-Image generation uses its independently selected provider: OpenAI (direct or through the
-LangSmith Gateway), or Alibaba. Changing the chat endpoint does not select a media provider.
+Explicit `DESIGN_AGENT_IMAGE_PROVIDER=aliyun` selects Alibaba image generation. Otherwise,
+OpenAI, Google and LangSmith Gateway routing follows the key and model selection above.
+Changing a compatible chat endpoint does not select an image provider.
 
 The OpenRouter entry uses Chat Completions and the portable tool selector. It disables reasoning
 because the client does not replay OpenRouter `reasoning_details`; effort settings do not enable
