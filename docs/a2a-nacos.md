@@ -432,18 +432,18 @@ uv run mypy src
 生产生命周期测试应使用独立测试名称和受保护 workspace；不要删除其它 publisher 的端点或正式定义。
 一份离线测试通过不代表真实模型、网络、Nacos 鉴权及文件交付全部通过，需要分别记录证据。
 
-## 8. 用本地 Web 应用演示发现与调用
+## 8. 用 ARC A2A Test Client 发现和测试 Agent
 
-仓库提供一个可本地运行的消费应用：
+仓库提供一个可本地运行的 A2A 测试客户端：
 
 ```bash
-uv run python scripts/agent-registration-center/app.py
+uv run python scripts/arc-a2a-test-client/app.py
 ```
 
 打开 `http://127.0.0.1:8099`，连接 Nacos，浏览全部可见 Agent、查看详情，再选择发现的健康端点发送真实 A2A 任务。
 注册中心命名为 **Agent Registration Center（ARC）**，负责目录、注册与发现，不转发 A2A 消息。
 默认使用 `https://arc.meerkatai.cn`；Nacos 登录凭证与目标 Agent 的调用凭证分别填写。
-详细操作及可选本地凭证配置见 [Web 演示说明](../scripts/agent-registration-center/README.md)。
+本地调试、团队 HTTPS 部署与操作说明见 [ARC A2A Test Client](../scripts/arc-a2a-test-client/README.md)。
 
 ## 官方资料
 

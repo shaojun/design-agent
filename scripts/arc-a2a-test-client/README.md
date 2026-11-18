@@ -1,7 +1,7 @@
-# ARC Web Explorer（Agent Registration Center）
+# ARC A2A Test Client
 
 流程：**连接 Nacos → 发现 Agent → 查看 Card 摘要 → 选择健康端点 → 使用 A2A 交互**。
-所有应用文件都在本目录，使用仓库已有 Python 依赖，不需要前端构建。
+这是一个使用 ARC 发现服务的 A2A 测试客户端。应用使用仓库已有 Python 依赖，直接提供静态页面。
 目录来自 Nacos AI Agent registry，显示当前 namespace 中账号可见的全部 Agent，自动遍历分页。
 
 ## 启动与调试
@@ -10,18 +10,38 @@
 
 ```bash
 uv sync --all-extras --dev
-uv run python scripts/agent-registration-center/app.py
+uv run python scripts/arc-a2a-test-client/app.py
 ```
 
 打开 **http://127.0.0.1:8099**，`--port 8100` 可更换端口。
-也可在 VS Code“运行和调试”中选择 **ARC: Web Client Explorer**，按 F5；服务就绪后自动打开浏览器。
+也可在 VS Code“运行和调试”中选择 **ARC: A2A Test Client**，按 F5；服务就绪后自动打开浏览器。
 先关闭已占用同一端口的进程，再使用 F5 启动。
 
 默认 Nacos 地址为 `https://arc.meerkatai.cn`，namespace 为 `public`。
 可填写其它实例的 origin（不附加 `/nacos`），然后用有目录读取权限的应用账号登录。
-本地 Python 进程必须能访问 Nacos 与发现的 Agent 地址；服务只监听本机。
+客户端进程必须能访问 Nacos 与发现的 Agent 地址；默认监听本机。
 未使用本地凭证文件时，需要在页面填写用户名和密码。登录被拒绝与目录读取权限不足会分别显示明确错误；
 修改代码后，VS Code 调试进程需要停止并重新 F5 启动，再刷新页面。
+
+## 团队部署
+
+将客户端作为单进程服务运行。为团队地址配置匹配的 TLS 证书，示例：
+
+```bash
+uv run python scripts/arc-a2a-test-client/app.py \
+  --bind 192.0.2.10 --port 8099 \
+  --shared-origin https://192.0.2.10:8099 \
+  --tls-cert /path/to/fullchain.pem --tls-key /path/to/private-key.pem
+```
+
+也可以让同主机上的 HTTPS 反向代理接入。保留默认监听地址，传入浏览器使用的
+`--shared-origin`，让代理保留原始 `Host` 并设置 `X-Forwarded-Proto: https`。关闭
+响应缓冲，保留流式输出，并为长任务调高代理读取超时。
+
+团队模式固定使用默认 ARC 注册中心。每位使用者用自己的 Nacos 读取账号登录，
+并按目标 Agent 的要求提供调用凭证。团队模式使用独立的 HTTPS 会话，禁用本地凭证文件。
+将服务开放给团队网络，并由受信任的注册方维护 ARC 中的端点。客户端从部署服务器
+发起请求，因此该服务器必须能访问已注册的目标端点。
 
 ## Agent token 的获取与错误提示
 
@@ -123,7 +143,7 @@ GetExtendedAgentCard 强制测试会发出真实请求，不使用 SDK 的缓存
 可以显式指定仓库外的 JSON，避免手动粘贴凭证：
 
 ```bash
-uv run python scripts/agent-registration-center/app.py --credentials-file /absolute/path/to/private-access.json
+uv run python scripts/arc-a2a-test-client/app.py --credentials-file /absolute/path/to/private-access.json
 ```
 
 也可设置 `ARC_CREDENTIALS_FILE` 环境变量，命令行与 VS Code 启动均会继承。
@@ -150,9 +170,9 @@ uv run python scripts/agent-registration-center/app.py --credentials-file /absol
 
 ```bash
 uv run pytest -q tests/unit/test_arc_web.py tests/unit/test_docs_links.py
-uv run ruff check scripts/agent-registration-center tests/unit/test_arc_web.py
-node --check scripts/agent-registration-center/app.js
-node --test scripts/agent-registration-center/ui.test.cjs
+uv run ruff check scripts/arc-a2a-test-client tests/unit/test_arc_web.py
+node --check scripts/arc-a2a-test-client/app.js
+node --test scripts/arc-a2a-test-client/ui.test.cjs
 ```
 
 离线测试通过真实 SDK 编解码覆盖全部 11 项操作、SSE、文件与结构化消息、分页，以及会话隔离、能力检查和文件下载授权。

@@ -12,7 +12,7 @@ from a2a.utils.errors import A2AError
 from fastapi import HTTPException
 
 _spec = importlib.util.spec_from_file_location(
-    "arc_web", Path(__file__).parents[2] / "scripts/agent-registration-center/app.py"
+    "arc_web", Path(__file__).parents[2] / "scripts/arc-a2a-test-client/app.py"
 )
 assert _spec and _spec.loader
 web = importlib.util.module_from_spec(_spec)
@@ -161,6 +161,49 @@ async def test_saved_credentials_are_not_sent_to_another_registry() -> None:
         )
         assert response.status_code == 400
         assert "test-password" not in response.text
+
+
+async def test_shared_client_requires_its_https_origin_and_pins_the_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_client = httpx.AsyncClient
+    outbound = []
+
+    def upstream(request):
+        outbound.append(request)
+        if request.method == "POST":
+            return httpx.Response(200, json={"accessToken": "test-token", "tokenTtl": 100})
+        return httpx.Response(200, json={"code": 0, "data": {"pageItems": [], "totalCount": 0}})
+
+    def client_factory(**kwargs):
+        return real_client(transport=httpx.MockTransport(upstream), **kwargs)
+
+    monkeypatch.setattr(web.httpx, "AsyncClient", client_factory)
+    shared = "https://arc-test.example:8099"
+    app = web.create_app(shared_origin=shared)
+    transport = httpx.ASGITransport(app)
+    async with real_client(transport=transport, base_url=shared) as client:
+        assert (await client.get("/api/config")).json()["registry_locked"] is True
+        assert (await client.get("http://arc-test.example:8099/")).status_code == 403
+        assert (await client.get("https://other.example:8099/")).status_code == 403
+        headers = {"X-ARC-Request": "1", "Origin": shared}
+        rejected = await client.post(
+            "/api/connect", headers=headers, json={"url": "https://other.example"}
+        )
+        assert rejected.status_code == 400
+        assert not outbound
+        connected = await client.post(
+            "/api/connect",
+            headers=headers,
+            json={"username": "reader", "password": "test-password"},
+        )
+        assert connected.status_code == 200
+        assert "; Secure" in connected.headers["set-cookie"]
+        assert (await client.get("/api/agents")).status_code == 200
+        assert all(str(request.url).startswith(web.DEFAULT_NACOS + "/") for request in outbound)
+
+    with pytest.raises(ValueError, match="individual credentials"):
+        web.create_app({"token": "test-token"}, shared_origin=shared)
 
 
 @pytest.mark.parametrize("action", list(web.OPERATIONS))

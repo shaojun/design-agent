@@ -37,11 +37,11 @@
             "subProcess": false
         },
         {
-            "name": "ARC: Web Client Explorer",
+            "name": "ARC: A2A Test Client",
             "type": "debugpy",
             "request": "launch",
             "python": "${workspaceFolder}/.venv/bin/python",
-            "program": "${workspaceFolder}/scripts/agent-registration-center/app.py",
+            "program": "${workspaceFolder}/scripts/arc-a2a-test-client/app.py",
             "args": [
                 "--port",
                 "8099"

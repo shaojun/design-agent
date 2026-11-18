@@ -3,16 +3,16 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Agent Registration Center · 本地演示</title>
+    <title>ARC A2A Test Client</title>
     <link rel="stylesheet" href="/assets/app.css" />
     <script src="/assets/app.js" defer></script>
   </head>
   <body>
     <header>
       <div class="brand">
-        arc<span>Agent Registration Center Explorer</span>
+        arc<span>A2A Test Client</span>
       </div>
-      <span class="pill">LOCAL DEMO · A2A 1.0</span>
+      <span class="pill">A2A 1.0 · JSON-RPC</span>
     </header>
     <main>
       <section class="intro">
@@ -43,7 +43,6 @@
                 required
                 autocomplete="username"
                 placeholder="Nacos 应用账号"
-                value="nacos"
             /></label>
             <label
               >密码<input
@@ -52,7 +51,6 @@
                 type="password"
                 autocomplete="current-password"
                 placeholder="Nacos 密码"
-                value="Meerkat123"
             /></label>
           </div>
           <div class="actions">
@@ -67,7 +65,7 @@
         </form>
         <p class="hint">
           账号需要目录读取权限。密码只用于本次登录，Nacos
-          令牌保存在本地进程内存；连接过期后请重新登录。
+          令牌保存在客户端服务的会话内存；连接过期后请重新登录。
         </p>
       </section>
       <div id="notice" role="alert" hidden></div>

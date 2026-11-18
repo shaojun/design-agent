@@ -72,7 +72,7 @@ async function responseJson(response) {
     return await response.json();
   } catch {
     throw new Error(
-      `HTTP ${response.status}：本地应用返回非 JSON 响应，请检查 VS Code 调试控制台，并重启应用后重试。`,
+      `HTTP ${response.status}：客户端服务返回非 JSON 响应，请检查服务日志后重试。`,
     );
   }
 }
@@ -1600,6 +1600,7 @@ api("/api/config")
       `协议来源：${config.protocol.source} · A2A ${config.protocol.version} / ${config.protocol.binding}；能力来源：Nacos 返回的当前 AgentCard。`,
     );
     $("registry-url").value = config.url;
+    $("registry-url").readOnly = config.registry_locked;
     $("saved-registry-label").hidden = !config.saved_available;
     $("saved-registry").checked = config.saved_available;
     savedFields();

@@ -1,4 +1,4 @@
-"""Local Nacos discovery + official A2A client demo. Run: uv run python scripts/agent-registration-center/app.py."""
+"""ARC A2A Test Client for agents discovered through Nacos."""
 
 from __future__ import annotations
 
@@ -447,7 +447,11 @@ def safe_error(error: Exception) -> dict[str, Any]:
     }
 
 
-def create_app(saved: dict[str, str] | None = None) -> FastAPI:
+def create_app(saved: dict[str, str] | None = None, *, shared_origin: str | None = None) -> FastAPI:
+    if shared_origin is not None:
+        shared_origin = origin(shared_origin)
+        if not shared_origin.startswith("https://") or saved:
+            raise ValueError("Shared mode requires an HTTPS origin and individual credentials")
     sessions: dict[str, Registry] = {}
     saved = saved or {}
 
@@ -456,18 +460,20 @@ def create_app(saved: dict[str, str] | None = None) -> FastAPI:
         yield
         sessions.clear()
 
-    app = FastAPI(title="Agent Registration Center Explorer", lifespan=lifespan)
+    app = FastAPI(title="ARC A2A Test Client", lifespan=lifespan)
 
     @app.middleware("http")
-    async def local_only(request: Request, next_handler: Any) -> Response:
-        # Restrict DNS rebinding and cross-site credentialed requests to this local demo.
-        host = request.url.hostname
-        if host not in {"127.0.0.1", "localhost", "[::1]", "::1"}:
+    async def check_browser_request(request: Request, next_handler: Any) -> Response:
+        request_origin = str(request.base_url).rstrip("/")
+        if shared_origin is not None:
+            if request_origin != shared_origin:
+                return Response("Use the configured HTTPS address", status_code=403)
+        elif request.url.hostname not in {"127.0.0.1", "localhost", "::1"}:
             return Response("Localhost only", status_code=403)
         if request.method != "GET" and request.headers.get("x-arc-request") != "1":
-            return Response("Missing local application header", status_code=403)
+            return Response("Missing application header", status_code=403)
         incoming_origin = request.headers.get("origin")
-        if incoming_origin and incoming_origin != str(request.base_url).rstrip("/"):
+        if incoming_origin and incoming_origin != request_origin:
             return Response("Cross-origin request rejected", status_code=403)
         if request.method == "POST" and len(await request.body()) > 16 * 1024 * 1024:
             return Response("Request too large (16 MiB)", status_code=413)
@@ -520,6 +526,7 @@ def create_app(saved: dict[str, str] | None = None) -> FastAPI:
     async def config() -> dict[str, Any]:
         return {
             "url": DEFAULT_NACOS,
+            "registry_locked": shared_origin is not None,
             "saved_available": bool(saved),
             "saved_agent_token": bool(saved.get("token")),
             "protocol": {
@@ -533,6 +540,8 @@ def create_app(saved: dict[str, str] | None = None) -> FastAPI:
     @app.post("/api/connect")
     async def connect(body: Login, request: Request, response: Response) -> dict[str, Any]:
         url = origin(body.url)
+        if shared_origin is not None and url != DEFAULT_NACOS:
+            raise HTTPException(400, "团队部署仅允许连接默认 ARC 注册中心")
         username, password = body.username, body.password.get_secret_value()
         if body.saved:
             if url != DEFAULT_NACOS or not saved:
@@ -571,6 +580,7 @@ def create_app(saved: dict[str, str] | None = None) -> FastAPI:
             COOKIE,
             key,
             httponly=True,
+            secure=shared_origin is not None,
             samesite="strict",
             max_age=int(session.expires - time.monotonic()),
         )
@@ -686,14 +696,40 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8099)
     parser.add_argument(
+        "--shared-origin",
+        help="Browser-facing HTTPS origin for team access",
+    )
+    parser.add_argument("--bind", default="127.0.0.1", help="Listen address")
+    parser.add_argument("--tls-cert", type=Path, help="TLS certificate chain (PEM)")
+    parser.add_argument("--tls-key", type=Path, help="TLS private key (PEM)")
+    parser.add_argument(
         "--credentials-file",
         type=Path,
         default=os.environ.get("ARC_CREDENTIALS_FILE") or None,
         help="Optional private JSON with nacos_username/nacos_password and origin/token; never served to browser",
     )
     args = parser.parse_args()
+    if args.shared_origin and args.credentials_file:
+        parser.error("--shared-origin requires individual credentials; unset ARC_CREDENTIALS_FILE")
+    if bool(args.tls_cert) != bool(args.tls_key):
+        parser.error("--tls-cert and --tls-key must be supplied together")
+    if args.bind not in {"127.0.0.1", "::1"} and not (args.shared_origin and args.tls_cert):
+        parser.error("A non-loopback bind requires --shared-origin and direct TLS")
     saved = json.loads(args.credentials_file.read_text()) if args.credentials_file else None
-    uvicorn.run(create_app(saved), host="127.0.0.1", port=args.port, access_log=False)
+    try:
+        app = create_app(saved, shared_origin=args.shared_origin)
+    except (HTTPException, ValueError) as error:
+        parser.error(str(error.detail) if isinstance(error, HTTPException) else str(error))
+    uvicorn.run(
+        app,
+        host=args.bind,
+        port=args.port,
+        forwarded_allow_ips="127.0.0.1",
+        proxy_headers=not args.tls_cert,
+        ssl_certfile=args.tls_cert,
+        ssl_keyfile=args.tls_key,
+        access_log=False,
+    )
 
 
 if __name__ == "__main__":
